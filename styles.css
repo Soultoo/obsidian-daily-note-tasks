@@ -1,8 +1,421 @@
-/*
+/* Daily Note Tasks - Todoist Style Quick Capture */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.dnt-capture-modal {
+	min-width: 480px;
+	max-width: 640px;
+	padding: 16px 20px !important;
+	border-radius: 12px !important;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+}
 
-If your plugin does not need CSS, delete this file.
+.dnt-modal-title h3 {
+	margin: 0 0 12px 0;
+	font-size: 1.15rem;
+	font-weight: 600;
+	color: var(--text-normal);
+}
 
-*/
+.dnt-editor-container {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background-color: var(--background-primary);
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	margin-bottom: 12px;
+	display: flex;
+	align-items: center;
+}
+
+.dnt-editor-container:focus-within {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+.dnt-editor-container .cm-editor {
+	background: transparent;
+	width: 100%;
+}
+
+.dnt-editor-container .cm-scroller {
+	font-family: var(--font-text);
+	overflow-x: hidden;
+}
+
+.dnt-text-input {
+	width: 100%;
+	padding: 10px 14px;
+	font-size: 0.95rem;
+	border: none;
+	background: transparent;
+	color: var(--text-normal);
+}
+
+.dnt-text-input:focus {
+	outline: none;
+	box-shadow: none;
+}
+
+/* NLP Syntax Highlighting */
+.dnt-nlp-date {
+	color: var(--color-blue, #3b82f6) !important;
+	background-color: rgba(59, 130, 246, 0.12);
+	border-radius: 4px;
+	padding: 1px 4px;
+	font-weight: 500;
+}
+
+.dnt-nlp-header {
+	color: var(--color-red, #ef4444) !important;
+	background-color: rgba(239, 68, 68, 0.12);
+	border-radius: 4px;
+	padding: 1px 4px;
+	font-weight: 500;
+}
+
+.dnt-nlp-recurrence {
+	color: var(--color-purple, #a855f7) !important;
+	background-color: rgba(168, 85, 247, 0.12);
+	border-radius: 4px;
+	padding: 1px 4px;
+	font-weight: 500;
+}
+
+.dnt-nlp-note {
+	color: var(--color-green, #10b981) !important;
+	background-color: rgba(16, 185, 129, 0.12);
+	border-radius: 4px;
+	padding: 1px 4px;
+	font-weight: 500;
+}
+
+/* Metadata Preview & Badges */
+.dnt-preview-container {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 14px;
+	min-height: 28px;
+}
+
+.dnt-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.8rem;
+	padding: 3px 8px;
+	border-radius: 6px;
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	user-select: none;
+}
+
+.dnt-note-badge {
+	color: var(--color-green, #10b981);
+	background-color: rgba(16, 185, 129, 0.08);
+	border-color: rgba(16, 185, 129, 0.25);
+	font-weight: 500;
+}
+
+.dnt-date-badge {
+	color: var(--color-blue, #3b82f6);
+	background-color: rgba(59, 130, 246, 0.08);
+	border-color: rgba(59, 130, 246, 0.25);
+	font-weight: 500;
+}
+
+.dnt-recurrence-badge {
+	color: var(--color-purple, #a855f7);
+	background-color: rgba(168, 85, 247, 0.08);
+	border-color: rgba(168, 85, 247, 0.25);
+	font-weight: 500;
+}
+
+.dnt-time-badge {
+	color: var(--color-purple, #8b5cf6);
+	background-color: rgba(139, 92, 246, 0.08);
+	border-color: rgba(139, 92, 246, 0.25);
+	font-weight: 500;
+}
+
+.dnt-header-badge {
+	color: var(--color-red, #ef4444);
+	background-color: rgba(239, 68, 68, 0.08);
+	border-color: rgba(239, 68, 68, 0.25);
+	font-weight: 500;
+}
+
+.dnt-text-badge {
+	color: var(--text-normal);
+	max-width: 320px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Move Task Specifics */
+.dnt-task-snippet {
+	background: var(--background-secondary);
+	border-radius: 6px;
+	padding: 8px 12px;
+	margin-bottom: 12px;
+}
+
+.dnt-task-preview-label {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.dnt-task-code {
+	font-family: var(--font-monospace);
+	font-size: 0.85rem;
+	color: var(--text-accent);
+}
+
+.dnt-presets-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.dnt-chip-button {
+	font-size: 0.75rem;
+	padding: 3px 10px;
+	border-radius: 12px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	cursor: pointer;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.dnt-chip-button:hover {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+/* Inline Codeblock '+ Add Task' Button */
+.dnt-add-btn-wrapper {
+	margin: 6px 0;
+	display: inline-block;
+}
+
+.dnt-inline-add-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.8rem;
+	font-weight: 500;
+	padding: 4px 12px;
+	border-radius: 6px;
+	border: 1px dashed var(--interactive-accent);
+	background-color: var(--background-secondary);
+	color: var(--text-accent);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.dnt-inline-add-btn:hover {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-style: solid;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Recurring Blueprints UI */
+.dnt-recurring-form {
+	background-color: var(--background-secondary);
+	padding: 12px;
+	border-radius: 8px;
+	margin-bottom: 16px;
+}
+
+.dnt-recurring-form h4 {
+	margin-top: 0;
+	margin-bottom: 8px;
+}
+
+.dnt-recurring-list h4 {
+	margin-top: 0;
+	margin-bottom: 8px;
+}
+
+/* Bottom Action Row */
+.dnt-button-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 12px;
+}
+
+.dnt-hint-text {
+	font-size: 0.75rem;
+	color: var(--text-faint);
+}
+
+.dnt-actions {
+	display: flex;
+	gap: 8px;
+}
+
+/* Highlight Pulse Animation when opening task in note */
+@keyframes dnt-pulse-highlight {
+	0% {
+		background-color: rgba(var(--color-accent-rgb, 59, 130, 246), 0.45) !important;
+	}
+	50% {
+		background-color: rgba(var(--color-accent-rgb, 59, 130, 246), 0.25) !important;
+	}
+	100% {
+		background-color: transparent !important;
+	}
+}
+
+.dnt-highlight-flash {
+	animation: dnt-pulse-highlight 2s ease-out !important;
+}
+
+/* Insert Button Modal Styles */
+.dnt-insert-button-modal {
+	min-width: 480px;
+	max-width: 600px;
+	padding: 20px !important;
+	border-radius: 12px !important;
+}
+
+.dnt-chips-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 4px;
+	margin-bottom: 12px;
+}
+
+.dnt-chip-btn {
+	font-size: 0.78rem;
+	padding: 3px 9px;
+	border-radius: 12px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.dnt-chip-btn:hover {
+	border-color: var(--interactive-accent);
+	color: var(--interactive-accent);
+	background-color: var(--background-primary);
+}
+
+.dnt-preview-box {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 12px;
+	margin-top: 14px;
+	margin-bottom: 14px;
+}
+
+.dnt-preview-title {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.dnt-preview-code {
+	font-family: var(--font-monospace);
+	font-size: 0.82rem;
+	color: var(--text-normal);
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	padding: 8px 12px;
+	border-radius: 6px;
+	margin-top: 10px;
+	margin-bottom: 0;
+	white-space: pre;
+}
+
+/* Quick Sign & Action Toolbar */
+.dnt-symbols-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+	align-items: center;
+}
+
+.dnt-symbol-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.8rem;
+	font-weight: 500;
+	padding: 4px 10px;
+	border-radius: 6px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	user-select: none;
+}
+
+.dnt-symbol-btn:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.dnt-symbol-btn .dnt-symbol-char {
+	font-weight: 700;
+	font-family: var(--font-monospace);
+}
+
+.dnt-symbol-note:hover,
+.dnt-symbol-note:focus {
+	border-color: var(--color-green, #10b981) !important;
+	color: var(--color-green, #10b981) !important;
+	background-color: rgba(16, 185, 129, 0.12) !important;
+}
+.dnt-symbol-note .dnt-symbol-char {
+	color: var(--color-green, #10b981);
+}
+
+.dnt-symbol-header:hover,
+.dnt-symbol-header:focus {
+	border-color: var(--color-red, #ef4444) !important;
+	color: var(--color-red, #ef4444) !important;
+	background-color: rgba(239, 68, 68, 0.12) !important;
+}
+.dnt-symbol-header .dnt-symbol-char {
+	color: var(--color-red, #ef4444);
+}
+
+.dnt-symbol-tag:hover,
+.dnt-symbol-tag:focus {
+	border-color: var(--color-orange, #f59e0b) !important;
+	color: var(--color-orange, #f59e0b) !important;
+	background-color: rgba(245, 158, 11, 0.12) !important;
+}
+.dnt-symbol-tag .dnt-symbol-char {
+	color: var(--color-orange, #f59e0b);
+}
+
+.dnt-symbol-date:hover,
+.dnt-symbol-date:focus {
+	border-color: var(--color-blue, #3b82f6) !important;
+	color: var(--color-blue, #3b82f6) !important;
+	background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+.dnt-symbol-recurrence:hover,
+.dnt-symbol-recurrence:focus {
+	border-color: var(--color-purple, #a855f7) !important;
+	color: var(--color-purple, #a855f7) !important;
+	background-color: rgba(168, 85, 247, 0.12) !important;
+}
