@@ -37,7 +37,7 @@ export class InsertButtonModal extends Modal {
 		modalEl.addClass('dnt-insert-button-modal');
 		contentEl.empty();
 
-		contentEl.createEl('h3', { text: 'Insert "+ Add Task" Button Code Block' });
+		contentEl.createEl('h3', { text: 'Insert "+ add task" button code block' });
 
 		const currentNoteName = this.currentFile?.basename || 'Current Note';
 		const fallbackHeader = this.currentHeader || this.defaultHeader || 'Todos';
@@ -45,16 +45,16 @@ export class InsertButtonModal extends Modal {
 		// Datalist for vault notes
 		const noteListId = 'dnt-note-suggestions';
 		const noteDatalist = contentEl.createEl('datalist', { attr: { id: noteListId } });
-		noteDatalist.createEl('option', { attr: { value: 'today' }, text: "Today's Daily Note" });
-		noteDatalist.createEl('option', { attr: { value: 'tomorrow' }, text: "Tomorrow's Daily Note" });
+		noteDatalist.createEl('option', { attr: { value: 'today' }, text: "Today's daily note" });
+		noteDatalist.createEl('option', { attr: { value: 'tomorrow' }, text: "Tomorrow's daily note" });
 		for (const f of this.app.vault.getMarkdownFiles()) {
 			noteDatalist.createEl('option', { attr: { value: f.basename } });
 		}
 
 		// 1. Target Note Setting
 		let noteInputEl: HTMLInputElement;
-		const noteSetting = new Setting(contentEl)
-			.setName('Target Note')
+		new Setting(contentEl)
+			.setName('Target note')
 			.setDesc(`Where tasks will be added. Leave empty for this note (${currentNoteName}).`)
 			.addText((text) => {
 				noteInputEl = text.inputEl;
@@ -89,7 +89,7 @@ export class InsertButtonModal extends Modal {
 
 		const noteBtn = noteChipsContainer.createEl('button', {
 			cls: 'dnt-symbol-btn dnt-symbol-note',
-			attr: { title: 'Target Note (/)' },
+			attr: { title: 'Target note (/)' },
 		});
 		noteBtn.createSpan({ cls: 'dnt-symbol-char', text: '/' });
 		noteBtn.createSpan({ text: ' Note' });
@@ -113,7 +113,7 @@ export class InsertButtonModal extends Modal {
 		// 2. Target Section / Header Setting
 		let headerInputEl: HTMLInputElement;
 		new Setting(contentEl)
-			.setName('Target Section / Header')
+			.setName('Target section / header')
 			.setDesc(`The heading to insert tasks under. Leave empty for current heading (${fallbackHeader}).`)
 			.addText((text) => {
 				headerInputEl = text.inputEl;
@@ -148,7 +148,7 @@ export class InsertButtonModal extends Modal {
 
 		const headerBtn = headerChipsContainer.createEl('button', {
 			cls: 'dnt-symbol-btn dnt-symbol-header',
-			attr: { title: 'Section Header (@)' },
+			attr: { title: 'Section header (@)' },
 		});
 		headerBtn.createSpan({ cls: 'dnt-symbol-char', text: '@' });
 		headerBtn.createSpan({ text: ' Header' });
@@ -169,8 +169,8 @@ export class InsertButtonModal extends Modal {
 
 		// 3. Custom Button Label (Optional)
 		new Setting(contentEl)
-			.setName('Custom Button Label')
-			.setDesc('Optional custom text on the button (e.g. "+ Add to Groceries"). Leave empty for auto.')
+			.setName('Custom button label')
+			.setDesc('Optional custom text on the button (e.g. "+ add to groceries"). Leave empty for auto.')
 			.addText((text) => {
 				text.setPlaceholder('Auto-generated from note and header');
 				text.onChange((val) => {
@@ -187,12 +187,12 @@ export class InsertButtonModal extends Modal {
 
 		// 4. Live Preview Section
 		const previewBox = contentEl.createDiv({ cls: 'dnt-preview-box' });
-		previewBox.createEl('div', { cls: 'dnt-preview-title', text: 'Live Button & Code Block Preview:' });
+		previewBox.createDiv({ cls: 'dnt-preview-title', text: 'Live button & code block preview:' });
 
 		const previewBtnWrapper = previewBox.createDiv({ cls: 'dnt-add-btn-wrapper' });
 		this.previewBtnEl = previewBtnWrapper.createEl('button', {
 			cls: 'dnt-inline-add-btn',
-			text: '+ Add Task',
+			text: '+ add task',
 		});
 		this.previewBtnEl.disabled = true;
 
@@ -211,12 +211,12 @@ export class InsertButtonModal extends Modal {
 
 		const insertBtn = actions.createEl('button', {
 			cls: 'mod-cta',
-			text: 'Insert Button',
+			text: 'Insert button',
 		});
 		insertBtn.addEventListener('click', () => this.submitAndInsert());
 
 		// Auto-focus the first input
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (noteInputEl) noteInputEl.focus();
 		}, 40);
 	}
@@ -302,7 +302,7 @@ export class InsertButtonModal extends Modal {
 			ch: 0,
 		});
 
-		new Notice('Inserted "+ Add Task" button code block.');
+		new Notice('Inserted "+ add task" button code block.');
 		this.close();
 	}
 

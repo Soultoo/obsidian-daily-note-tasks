@@ -1,4 +1,6 @@
-import { Moment } from 'moment';
+import type { moment } from 'obsidian';
+
+export type Moment = moment.Moment;
 
 export interface Span {
 	from: number;

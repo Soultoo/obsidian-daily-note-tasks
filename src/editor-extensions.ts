@@ -188,7 +188,7 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		override: [
 			(context: CompletionContext): CompletionResult | null => {
 				// Target note autocomplete on '/'
-				const noteWord = context.matchBefore(/\/[\w\s\-\./]*$/);
+				const noteWord = context.matchBefore(/\/[\w\s\-/.]*$/);
 				if (noteWord) {
 					const notes = getVaultNotes();
 					return {
@@ -313,7 +313,7 @@ export function insertSymbolAtCursor(
 	view.focus();
 
 	if (triggerCompletion) {
-		setTimeout(() => {
+		window.setTimeout(() => {
 			startCompletion(view);
 		}, 30);
 	}

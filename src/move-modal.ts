@@ -7,7 +7,6 @@ import { DailyNoteManager } from './daily-note-manager';
 import { TemplateParser } from './template-parser';
 import { ExtractedTaskBlock } from './task-ast';
 import { ParsedTask, PluginSettings } from './types';
-import { Moment } from 'moment';
 
 export function applyTimeToMovedTask(
 	fullText: string,
@@ -72,11 +71,11 @@ export class MoveTaskModal extends Modal {
 		contentEl.empty();
 
 		const titleEl = contentEl.createDiv({ cls: 'dnt-modal-title' });
-		titleEl.createEl('h3', { text: 'Move Task (Zero Click)' });
+		titleEl.createEl('h3', { text: 'Move task (zero click)' });
 
 		// Display snippet of task being moved
 		const taskSnippetEl = contentEl.createDiv({ cls: 'dnt-task-snippet' });
-		taskSnippetEl.createEl('div', {
+		taskSnippetEl.createDiv({
 			cls: 'dnt-task-preview-label',
 			text: 'Task to move:',
 		});
@@ -120,11 +119,11 @@ export class MoveTaskModal extends Modal {
 			return btn;
 		};
 
-		addSignBtn('/', 'Note', 'dnt-symbol-note', 'Target Note (/)', () => {
+		addSignBtn('/', 'Note', 'dnt-symbol-note', 'Target note (/)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '/', true);
 		});
 
-		addSignBtn('@', 'Section', 'dnt-symbol-header', 'Section Header (@)', () => {
+		addSignBtn('@', 'Section', 'dnt-symbol-header', 'Section header (@)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '@', true);
 		});
 
@@ -187,9 +186,9 @@ export class MoveTaskModal extends Modal {
 
 		// Action buttons row
 		const buttonsEl = contentEl.createDiv({ cls: 'dnt-button-row' });
-		buttonsEl.createEl('span', {
+		buttonsEl.createSpan({
 			cls: 'dnt-hint-text',
-			text: 'Enter to move • Esc to cancel • "tod"/"tom" • @section',
+			text: 'Enter to move • esc to cancel • "tod"/"tom" • @section',
 		});
 
 		const actionsEl = buttonsEl.createDiv({ cls: 'dnt-actions' });
@@ -198,11 +197,11 @@ export class MoveTaskModal extends Modal {
 
 		const moveBtn = actionsEl.createEl('button', {
 			cls: 'mod-cta',
-			text: 'Move Task',
+			text: 'Move task',
 		});
 		moveBtn.addEventListener('click', () => void this.executeMove());
 
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (this.editorView) {
 				this.editorView.focus();
 				this.editorView.dispatch({

@@ -50,16 +50,18 @@ export default class DailyNoteTasksPlugin extends Plugin {
 
 		// Event listener for daily note creation: inject due recurring tasks
 		this.registerEvent(
-			this.app.vault.on('create', async (file) => {
+			this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
 					const date = getDateFromFile(file, 'day');
 					if (date && date.isValid()) {
-						setTimeout(async () => {
-							try {
-								await this.recurringManager.injectDueTasksForDate(file, date);
-							} catch (err) {
-								console.error('Failed to inject recurring tasks on note create:', err);
-							}
+						window.setTimeout(() => {
+							void (async () => {
+								try {
+									await this.recurringManager.injectDueTasksForDate(file, date);
+								} catch (err) {
+									console.error('Failed to inject recurring tasks on note create:', err);
+								}
+							})();
 						}, 250);
 					}
 				}
@@ -212,20 +214,14 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		registerAddTaskBlock('dnt-add');
 
 		// Ribbon icon for Quick Task Capture
-		this.addRibbonIcon('check-square', 'Quick Task Capture (Daily Note Tasks)', () => {
+		this.addRibbonIcon('check-square', 'Quick task capture (daily note tasks)', () => {
 			this.openCaptureModal();
 		});
 
 		// Command 1: Quick Task Capture (NLP)
 		this.addCommand({
 			id: 'quick-task-capture',
-			name: 'Quick Task Capture (NLP)',
-			hotkeys: [
-				{
-					modifiers: ['Mod', 'Shift'],
-					key: 'C',
-				},
-			],
+			name: 'Quick task capture (nlp)',
 			callback: () => {
 				this.openCaptureModal();
 			},
@@ -234,7 +230,7 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		// Command 2: Move Task to Date (AST Caret Parsing with CM6 & Syntax Highlighting)
 		this.addCommand({
 			id: 'move-task-to-date',
-			name: 'Move Task to Date (Zero Click)',
+			name: 'Move task to date (zero click)',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const file = ctx.file;
 				if (!file) {
@@ -244,7 +240,7 @@ export default class DailyNoteTasksPlugin extends Plugin {
 
 				const taskBlock = this.taskAstParser.extractTaskAtCursor(editor, file);
 				if (!taskBlock) {
-					new Notice('No task or list item found at cursor position.');
+					new Notice('No task or list item found at Cursor position.');
 					return;
 				}
 
@@ -263,7 +259,7 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		// Command 3: Manage Recurring Tasks
 		this.addCommand({
 			id: 'manage-recurring-tasks',
-			name: 'Manage Recurring Tasks',
+			name: 'Manage recurring tasks',
 			callback: () => {
 				new RecurringTasksModal(
 					this.app,
@@ -278,7 +274,7 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		// Command 4: Insert "+ Add Task" Button Code Block at Cursor
 		this.addCommand({
 			id: 'insert-add-task-button',
-			name: 'Insert "+ Add Task" Button Code Block',
+			name: 'Insert "+ add task" button code block',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const cursor = editor.getCursor();
 				let currentHeader = '';

@@ -434,3 +434,7 @@
 	margin-left: 6px !important;
 	transition: all 0.2s ease;
 }
+
+.dnt-hidden {
+	display: none !important;
+}

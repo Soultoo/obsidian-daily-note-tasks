@@ -26,12 +26,15 @@ export class TemplateParser {
 
 		if (!(file instanceof TFile)) {
 			const files = this.app.vault.getMarkdownFiles();
-			file = files.find(
+			const matched = files.find(
 				(f) =>
 					f.path === templatePath ||
 					f.basename === templatePath ||
 					f.name === templatePath
-			) as TFile;
+			);
+			if (matched) {
+				file = matched;
+			}
 		}
 
 		if (!(file instanceof TFile)) {

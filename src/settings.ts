@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, SettingDefinitionItem } from 'obsidian';
 import type DailyNoteTasksPlugin from './main';
 import { RecurringTasksModal } from './recurring-modal';
 
@@ -11,17 +11,21 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
+		this.renderSettings();
+	}
+
+	private renderSettings(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Daily Note Tasks Settings' });
+		new Setting(containerEl).setName('Sections & templates').setHeading();
 
 		// Default Section Header (Daily Notes)
 		const headerNames = this.plugin.templateParser.getHeaderNames();
 
 		new Setting(containerEl)
-			.setName('Default Daily Note Section Header')
-			.setDesc('Tasks without a specified @section will be added under this header in Daily Notes.')
+			.setName('Default daily note section header')
+			.setDesc('Tasks without a specified @section will be added under this header in daily notes.')
 			.addDropdown((dropdown) => {
 				for (const header of headerNames) {
 					dropdown.addOption(header, header);
@@ -53,8 +57,8 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 
 		// Default Section Header (Custom Notes e.g. /groceries)
 		new Setting(containerEl)
-			.setName('Default Custom Note Header')
-			.setDesc('Header used when targeting a custom note (/note) without a specified @section (e.g. "Todos" creates "## Todos").')
+			.setName('Default custom note header')
+			.setDesc('Header used when targeting a custom note (/note) without a specified @section (e.g. "todos" creates "## todos").')
 			.addText((text) => {
 				text
 					.setPlaceholder('Todos')
@@ -66,14 +70,14 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			});
 
 		// Time Options
-		containerEl.createEl('h3', { text: 'Time Formatting' });
+		new Setting(containerEl).setName('Time formatting').setHeading();
 
 		new Setting(containerEl)
-			.setName('Time Format')
-			.setDesc('Format used when a natural language time is typed (e.g. "HH:mm" for 17:00 or "h:mm a" for 5:00 PM).')
+			.setName('Time format')
+			.setDesc('Format used when a natural language time is typed (e.g. "hh:mm" for 17:00 or "h:mm a" for 5:00 pm).')
 			.addText((text) =>
 				text
-					.setPlaceholder('HH:mm')
+					.setPlaceholder('Hh:mm')
 					.setValue(this.plugin.settings.timeFormat || 'HH:mm')
 					.onChange(async (value) => {
 						this.plugin.settings.timeFormat = value.trim() || 'HH:mm';
@@ -82,7 +86,7 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Time Placement')
+			.setName('Time placement')
 			.setDesc('Where parsed times should be placed in the task bullet.')
 			.addDropdown((dropdown) => {
 				dropdown
@@ -97,26 +101,28 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			});
 
 		// Capture Behavior
-		containerEl.createEl('h3', { text: 'Capture Behavior' });
+		new Setting(containerEl).setName('Capture behavior').setHeading();
 
-		let inNewTabSetting: Setting;
-		let swapToNewTabSetting: Setting;
+		let inNewTabSetting: Setting | null = null;
+		let swapToNewTabSetting: Setting | null = null;
 
 		const updateSubSettingsVisibility = () => {
 			const isOpenNote = this.plugin.settings.openNoteOnTaskAdd === true;
 			const isInNewTab = this.plugin.settings.openNoteInNewTab === true;
 
-			if (inNewTabSetting) {
-				inNewTabSetting.settingEl.style.display = isOpenNote ? '' : 'none';
+			if (inNewTabSetting !== null) {
+				inNewTabSetting.settingEl.classList.toggle('dnt-hidden', !isOpenNote);
 			}
-			if (swapToNewTabSetting) {
-				swapToNewTabSetting.settingEl.style.display =
-					isOpenNote && isInNewTab ? '' : 'none';
+			if (swapToNewTabSetting !== null) {
+				swapToNewTabSetting.settingEl.classList.toggle(
+					'dnt-hidden',
+					!(isOpenNote && isInNewTab)
+				);
 			}
 		};
 
 		new Setting(containerEl)
-			.setName('Open Note on Task Add')
+			.setName('Open note on task add')
 			.setDesc('Automatically open the target note and highlight (select) the newly added task.')
 			.addToggle((toggle) => {
 				toggle
@@ -158,9 +164,9 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 		updateSubSettingsVisibility();
 
 		new Setting(containerEl)
-			.setName('Reopen Capture for Code Block Button')
+			.setName('Reopen capture for code block button')
 			.setDesc(
-				'When adding a task via an inline "+ Add Task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.'
+				'When adding a task via an inline "+ add task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.'
 			)
 			.addToggle((toggle) => {
 				toggle
@@ -172,11 +178,11 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			});
 
 		// Recurring Tasks
-		containerEl.createEl('h3', { text: 'Recurring Tasks' });
+		new Setting(containerEl).setName('Recurring tasks').setHeading();
 
 		new Setting(containerEl)
-			.setName('Italicize Recurring Tasks')
-			.setDesc('Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *Task name*).')
+			.setName('Italicize recurring tasks')
+			.setDesc('Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *task name*).')
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this.plugin.settings.italicizeRecurringTasks !== false)
@@ -187,12 +193,12 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName('Manage Recurring Tasks')
+			.setName('Manage recurring tasks')
 			.setDesc(
 				`Manage active recurring blueprints (${this.plugin.settings.recurringBlueprints.length} active). Injects tasks when daily notes are created and sweeps future notes upon cancellation.`
 			)
 			.addButton((button) => {
-				button.setButtonText('Open Manager').onClick(() => {
+				button.setButtonText('Open manager').onClick(() => {
 					new RecurringTasksModal(
 						this.app,
 						this.plugin.recurringManager,
@@ -204,47 +210,47 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 			});
 
 		// Recent Sections & Notes
-		containerEl.createEl('h3', { text: 'Autocomplete & Recents' });
+		new Setting(containerEl).setName('Autocomplete & recents').setHeading();
 
 		const recentsCount = this.plugin.settings.recentHeaders.length;
 		new Setting(containerEl)
-			.setName('Recent Sections (@)')
+			.setName('Recent sections (@)')
 			.setDesc(
 				recentsCount > 0
 					? `Recently used: ${this.plugin.settings.recentHeaders.join(', ')}`
 					: 'No recent sections recorded yet.'
 			)
 			.addButton((button) => {
-				button.setButtonText('Clear Recent Sections').onClick(async () => {
+				button.setButtonText('Clear recent sections').onClick(async () => {
 					this.plugin.settings.recentHeaders = [];
 					await this.plugin.saveSettings();
-					this.display();
+					this.renderSettings();
 				});
 			});
 
 		const recentNotesCount = (this.plugin.settings.recentNotes || []).length;
 		new Setting(containerEl)
-			.setName('Recent Target Notes (/)')
+			.setName('Recent target notes (/)')
 			.setDesc(
 				recentNotesCount > 0
 					? `Recently used: ${this.plugin.settings.recentNotes.join(', ')}`
 					: 'No recent target notes recorded yet.'
 			)
 			.addButton((button) => {
-				button.setButtonText('Clear Recent Notes').onClick(async () => {
+				button.setButtonText('Clear recent notes').onClick(async () => {
 					this.plugin.settings.recentNotes = [];
 					await this.plugin.saveSettings();
-					this.display();
+					this.renderSettings();
 				});
 			});
 
 		new Setting(containerEl)
-			.setName('Reload Template Headers')
-			.setDesc('Re-scans the Daily Note Template file to update available section headers.')
+			.setName('Reload template headers')
+			.setDesc('Re-scans the daily note template file to update available section headers.')
 			.addButton((button) => {
-				button.setButtonText('Reload Headers').onClick(async () => {
+				button.setButtonText('Reload headers').onClick(async () => {
 					await this.plugin.templateParser.loadHeaders();
-					this.display();
+					this.renderSettings();
 				});
 			});
 	}
@@ -253,7 +259,7 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 	 * Declarative settings definitions used by Obsidian v1.13+ settings search indexing.
 	 * Exposes all settings titles, descriptions, and controls directly to Obsidian's native search bar.
 	 */
-	getSettingDefinitions(): any[] {
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		const headerNames = this.plugin.templateParser.getHeaderNames();
 		const headerOptions: Record<string, string> = {};
 		for (const h of headerNames) {
@@ -265,103 +271,112 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 
 		return [
 			{
-				type: 'heading',
-				name: 'Sections & Templates',
-			},
-			{
-				name: 'Default Daily Note Section Header',
-				desc: 'Tasks without a specified @section will be added under this header in Daily Notes.',
-				control: {
-					type: 'dropdown',
-					key: 'defaultHeader',
-					options: headerOptions,
-				},
-			},
-			{
-				name: 'Default Custom Note Header',
-				desc: 'Header used when targeting a custom note (/note) without a specified @section (e.g. "Todos" creates "## Todos").',
-				control: {
-					type: 'text',
-					key: 'defaultCustomNoteHeader',
-					placeholder: 'Todos',
-				},
-			},
-			{
-				type: 'heading',
-				name: 'Time Formatting',
-			},
-			{
-				name: 'Time Format',
-				desc: 'Format used when a natural language time is typed (e.g. "HH:mm" for 17:00 or "h:mm a" for 5:00 PM).',
-				control: {
-					type: 'text',
-					key: 'timeFormat',
-					placeholder: 'HH:mm',
-				},
-			},
-			{
-				name: 'Time Placement',
-				desc: 'Where parsed times should be placed in the task bullet.',
-				control: {
-					type: 'dropdown',
-					key: 'timePosition',
-					options: {
-						natural: 'Natural: keep where typed in sentence',
-						prefix: 'Prefix: - [ ] 17:00 Buy groceries',
-						suffix: 'Suffix: - [ ] Buy groceries 17:00',
+				type: 'group',
+				heading: 'Sections & templates',
+				items: [
+					{
+						name: 'Default daily note section header',
+						desc: 'Tasks without a specified @section will be added under this header in daily notes.',
+						control: {
+							type: 'dropdown',
+							key: 'defaultHeader',
+							options: headerOptions,
+						},
 					},
-				},
+					{
+						name: 'Default custom note header',
+						desc: 'Header used when targeting a custom note (/note) without a specified @section (e.g. "todos" creates "## todos").',
+						control: {
+							type: 'text',
+							key: 'defaultCustomNoteHeader',
+							placeholder: 'Todos',
+						},
+					},
+				],
 			},
 			{
-				type: 'heading',
-				name: 'Capture Behavior',
+				type: 'group',
+				heading: 'Time formatting',
+				items: [
+					{
+						name: 'Time format',
+						desc: 'Format used when a natural language time is typed (e.g. "hh:mm" for 17:00 or "h:mm a" for 5:00 pm).',
+						control: {
+							type: 'text',
+							key: 'timeFormat',
+							placeholder: 'Hh:mm',
+						},
+					},
+					{
+						name: 'Time placement',
+						desc: 'Where parsed times should be placed in the task bullet.',
+						control: {
+							type: 'dropdown',
+							key: 'timePosition',
+							options: {
+								natural: 'Natural: keep where typed in sentence',
+								prefix: 'Prefix: - [ ] 17:00 Buy groceries',
+								suffix: 'Suffix: - [ ] Buy groceries 17:00',
+							},
+						},
+					},
+				],
 			},
 			{
-				name: 'Open Note on Task Add',
-				desc: 'Automatically open the target note and highlight (select) the newly added task.',
-				control: {
-					type: 'toggle',
-					key: 'openNoteOnTaskAdd',
-				},
+				type: 'group',
+				heading: 'Capture behavior',
+				items: [
+					{
+						name: 'Open note on task add',
+						desc: 'Automatically open the target note and highlight (select) the newly added task.',
+						control: {
+							type: 'toggle',
+							key: 'openNoteOnTaskAdd',
+						},
+					},
+					{
+						name: 'In new tab',
+						desc: 'Open the note in a new tab instead of the current active tab.',
+						visible: () => this.plugin.settings.openNoteOnTaskAdd,
+						control: {
+							type: 'toggle',
+							key: 'openNoteInNewTab',
+						},
+					},
+					{
+						name: 'Swap to new tab',
+						desc: 'Automatically focus and switch to the newly opened tab.',
+						visible: () =>
+							this.plugin.settings.openNoteOnTaskAdd &&
+							this.plugin.settings.openNoteInNewTab,
+						control: {
+							type: 'toggle',
+							key: 'swapToNewTab',
+						},
+					},
+					{
+						name: 'Reopen capture for code block button',
+						desc: 'When adding a task via an inline "+ add task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.',
+						control: {
+							type: 'toggle',
+							key: 'reopenCaptureOnCodeBlock',
+						},
+					},
+				],
 			},
 			{
-				name: 'In new tab',
-				desc: 'Open the note in a new tab instead of the current active tab.',
-				visible: () => this.plugin.settings.openNoteOnTaskAdd,
-				control: {
-					type: 'toggle',
-					key: 'openNoteInNewTab',
-				},
-			},
-			{
-				name: 'Swap to new tab',
-				desc: 'Automatically focus and switch to the newly opened tab.',
-				visible: () =>
-					this.plugin.settings.openNoteOnTaskAdd && this.plugin.settings.openNoteInNewTab,
-				control: {
-					type: 'toggle',
-					key: 'swapToNewTab',
-				},
-			},
-			{
-				name: 'Reopen Capture for Code Block Button',
-				desc: 'When adding a task via an inline "+ Add Task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.',
-				control: {
-					type: 'toggle',
-					key: 'reopenCaptureOnCodeBlock',
-				},
-			},
-			{
-				type: 'heading',
-				name: 'Recurring Tasks',
-			},
-			{
-				name: 'Italicize Recurring Tasks',
-				desc: 'Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *Task name*).',
-				control: {
-					type: 'toggle',
-					key: 'italicizeRecurringTasks',
-				},
+				type: 'group',
+				heading: 'Recurring tasks',
+				items: [
+					{
+						name: 'Italicize recurring tasks',
+						desc: 'Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *task name*).',
+						control: {
+							type: 'toggle',
+							key: 'italicizeRecurringTasks',
+						},
+					},
+				],
 			},
 		];
 	}

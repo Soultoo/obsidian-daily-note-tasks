@@ -1,5 +1,5 @@
 import { moment } from 'obsidian';
-import { Moment } from 'moment';
+type Moment = moment.Moment;
 import { RecurrenceRule, Span } from './types';
 
 const DAY_MAP: Record<string, number> = {
@@ -115,7 +115,7 @@ export function parseRecurrenceFromText(
 		unit = 'year';
 	} else if (DAY_MAP[unitStr] !== undefined) {
 		unit = 'week';
-		daysOfWeek = [DAY_MAP[unitStr]!];
+		daysOfWeek = [DAY_MAP[unitStr]];
 	}
 
 	const rule: RecurrenceRule = {
@@ -141,7 +141,7 @@ function parseDaysOfWeek(str: string): number[] {
 	const days: number[] = [];
 	for (const token of tokens) {
 		if (DAY_MAP[token] !== undefined) {
-			days.push(DAY_MAP[token]!);
+			days.push(DAY_MAP[token]);
 		}
 	}
 	return days.length > 0 ? Array.from(new Set(days)) : [1];

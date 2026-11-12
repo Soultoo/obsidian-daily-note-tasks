@@ -57,7 +57,7 @@ export class TaskCaptureModal extends Modal {
 		contentEl.empty();
 
 		const titleEl = contentEl.createDiv({ cls: 'dnt-modal-title' });
-		titleEl.createEl('h3', { text: 'Quick Task Capture' });
+		titleEl.createEl('h3', { text: 'Quick task capture' });
 
 		// Quick Signs & Action Buttons Toolbar (/ # @)
 		const toolbarEl = contentEl.createDiv({ cls: 'dnt-symbols-toolbar' });
@@ -86,11 +86,11 @@ export class TaskCaptureModal extends Modal {
 			return btn;
 		};
 
-		addSignBtn('/', 'Note', 'dnt-symbol-note', 'Target Note (/)', () => {
+		addSignBtn('/', 'Note', 'dnt-symbol-note', 'Target note (/)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '/', true);
 		});
 
-		addSignBtn('@', 'Section', 'dnt-symbol-header', 'Section Header (@)', () => {
+		addSignBtn('@', 'Section', 'dnt-symbol-header', 'Section header (@)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '@', true);
 		});
 
@@ -106,7 +106,7 @@ export class TaskCaptureModal extends Modal {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, 'tom', false);
 		});
 
-		addSignBtn('🔁', 'Every', 'dnt-symbol-recurrence', 'Recurrence (every X Y)', () => {
+		addSignBtn('🔁', 'Every', 'dnt-symbol-recurrence', 'Recurrence (every X y)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, 'every ', false);
 		});
 
@@ -146,9 +146,9 @@ export class TaskCaptureModal extends Modal {
 
 		// Action buttons row
 		const buttonsEl = contentEl.createDiv({ cls: 'dnt-button-row' });
-		buttonsEl.createEl('span', {
+		buttonsEl.createSpan({
 			cls: 'dnt-hint-text',
-			text: 'Enter to save • /note • @section • "every X Y" • "tod"/"tom" • #tags',
+			text: 'Enter to save • /note • @section • "every X y" • "tod"/"tom" • #tags',
 		});
 
 		const actionsEl = buttonsEl.createDiv({ cls: 'dnt-actions' });
@@ -157,7 +157,7 @@ export class TaskCaptureModal extends Modal {
 
 		this.submitBtn = actionsEl.createEl('button', {
 			cls: 'mod-cta',
-			text: 'Add Task',
+			text: 'Add task',
 		});
 		this.submitBtn.addEventListener('click', () => void this.submitTask());
 
@@ -199,7 +199,7 @@ export class TaskCaptureModal extends Modal {
 			parent: editorContainerEl,
 		});
 
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (this.editorView) {
 				this.editorView.focus();
 				const len = this.editorView.state.doc.length;
@@ -229,27 +229,25 @@ export class TaskCaptureModal extends Modal {
 		this.currentParsed = parsed;
 
 		// 1. Target Note badge
+		const hasTargetNote = Boolean(parsed.targetNote);
+		this.noteBadgeEl.classList.toggle('dnt-hidden', !hasTargetNote);
 		if (parsed.targetNote) {
-			this.noteBadgeEl.style.display = 'inline-flex';
 			this.noteBadgeEl.setText(`📝 /${parsed.targetNote}`);
-		} else {
-			this.noteBadgeEl.style.display = 'none';
 		}
 
 		// 2. Recurrence vs One-off Date
 		if (parsed.recurrence) {
-			this.dateBadgeEl.style.display = 'none';
-			this.recurrenceBadgeEl.style.display = 'inline-flex';
+			this.dateBadgeEl.classList.add('dnt-hidden');
+			this.recurrenceBadgeEl.classList.remove('dnt-hidden');
 			this.recurrenceBadgeEl.setText(`🔁 ${formatRecurrenceLabel(parsed.recurrence)}`);
-			if (this.submitBtn) this.submitBtn.setText('Add Recurring Task');
+			if (this.submitBtn) this.submitBtn.setText('Add recurring task');
 		} else {
-			this.recurrenceBadgeEl.style.display = 'none';
+			this.recurrenceBadgeEl.classList.add('dnt-hidden');
 
 			// If target note is specified, date badge is optional, but if date was parsed show it
-			if (parsed.targetNote && !parsed.date) {
-				this.dateBadgeEl.style.display = 'none';
-			} else {
-				this.dateBadgeEl.style.display = 'inline-flex';
+			const hideDate = Boolean(parsed.targetNote && !parsed.date);
+			this.dateBadgeEl.classList.toggle('dnt-hidden', hideDate);
+			if (!hideDate) {
 				const targetDate = parsed.date || this.defaultDateMoment || moment();
 				const isToday = targetDate.isSame(moment(), 'day');
 				const isTomorrow = targetDate.isSame(moment().add(1, 'day'), 'day');
@@ -262,15 +260,14 @@ export class TaskCaptureModal extends Modal {
 				this.dateBadgeEl.setText(`📅 ${dateLabel}`);
 			}
 
-			if (this.submitBtn) this.submitBtn.setText('Add Task');
+			if (this.submitBtn) this.submitBtn.setText('Add task');
 		}
 
 		// 3. Time badge
-		if (parsed.hasTime && parsed.timeStr) {
+		const showTime = Boolean(parsed.hasTime && parsed.timeStr);
+		this.timeBadgeEl.classList.toggle('dnt-hidden', !showTime);
+		if (showTime && parsed.timeStr) {
 			this.timeBadgeEl.setText(`⏰ ${parsed.timeStr}`);
-			this.timeBadgeEl.style.display = 'inline-flex';
-		} else {
-			this.timeBadgeEl.style.display = 'none';
 		}
 
 		// 4. Header badge
@@ -359,7 +356,7 @@ export class TaskCaptureModal extends Modal {
 
 				this.close();
 				if (this.onReopen && this.settings.reopenCaptureOnCodeBlock !== false) {
-					setTimeout(() => {
+					window.setTimeout(() => {
 						this.onReopen?.();
 					}, 120);
 				}
@@ -401,7 +398,7 @@ export class TaskCaptureModal extends Modal {
 
 				this.close();
 				if (this.onReopen && this.settings.reopenCaptureOnCodeBlock !== false) {
-					setTimeout(() => {
+					window.setTimeout(() => {
 						this.onReopen?.();
 					}, 120);
 				}
@@ -430,7 +427,7 @@ export class TaskCaptureModal extends Modal {
 
 			this.close();
 			if (this.onReopen && this.settings.reopenCaptureOnCodeBlock !== false) {
-				setTimeout(() => {
+				window.setTimeout(() => {
 					this.onReopen?.();
 				}, 120);
 			}

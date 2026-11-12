@@ -2,7 +2,7 @@
 	"id": "obsidian-daily-note-tasks",
 	"name": "Daily Note Tasks",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
+	"minAppVersion": "1.1.0",
 	"description": "Fluid, Todoist-style task manager using Daily Notes and custom notes as single source of truth.",
 	"author": "Obsidian",
 	"authorUrl": "https://obsidian.md",

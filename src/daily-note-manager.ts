@@ -1,10 +1,16 @@
-import { App, MarkdownView, Notice, TFile, moment } from 'obsidian';
+import { App, MarkdownView, Notice, TFile, WorkspaceLeaf, moment } from 'obsidian';
 import {
 	createDailyNote,
 	getAllDailyNotes,
 	getDailyNote,
 } from 'obsidian-daily-notes-interface';
-import { Moment } from 'moment';
+import type { Moment } from './types';
+
+interface LeafWithParentTab {
+	parent?: {
+		selectTab?: (leaf: WorkspaceLeaf) => void;
+	};
+}
 
 export class DailyNoteManager {
 	private app: App;
@@ -111,16 +117,11 @@ export class DailyNoteManager {
 	): Promise<void> {
 		try {
 			// Record currently active leaf before creating new tab
-			const previousActiveLeaf =
-				(typeof this.app.workspace?.getActiveViewOfType === 'function'
-					? this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf
-					: null) ||
-				(typeof this.app.workspace?.getMostRecentLeaf === 'function'
-					? this.app.workspace.getMostRecentLeaf()
-					: null) ||
-				(this.app.workspace as any)?.activeLeaf;
+			const previousActiveLeaf: WorkspaceLeaf | null =
+				this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf ??
+				this.app.workspace.getMostRecentLeaf();
 
-			let leaf: any;
+			let leaf: WorkspaceLeaf;
 
 			if (openInNewTab) {
 				leaf = this.app.workspace.getLeaf('tab');
@@ -131,19 +132,19 @@ export class DailyNoteManager {
 
 				if (!swapToNewTab && previousActiveLeaf && previousActiveLeaf !== leaf) {
 					this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
-					const parentTabs = (previousActiveLeaf as any).parent;
+					const parentTabs = (previousActiveLeaf as unknown as LeafWithParentTab).parent;
 					if (parentTabs && typeof parentTabs.selectTab === 'function') {
 						parentTabs.selectTab(previousActiveLeaf);
 					}
 				}
 			} else {
 				// Find existing leaf displaying this file or open/reuse one
-				leaf = this.app.workspace.getLeavesOfType('markdown').find((l) => {
+				const existing = this.app.workspace.getLeavesOfType('markdown').find((l) => {
 					return l.view instanceof MarkdownView && l.view.file?.path === file.path;
 				});
 
-				if (!leaf) {
-					leaf = this.app.workspace.getLeaf(false);
+				leaf = existing ?? this.app.workspace.getLeaf(false);
+				if (!existing) {
 					await leaf.openFile(file, { active: true });
 				}
 				this.app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -151,11 +152,12 @@ export class DailyNoteManager {
 
 			// Brief wait in case view is initializing
 			if (!(leaf.view instanceof MarkdownView)) {
-				await new Promise((resolve) => setTimeout(resolve, 80));
+				await new Promise((resolve) => window.setTimeout(resolve, 80));
 			}
 
 			if (leaf.view instanceof MarkdownView) {
-				const editor = leaf.view.editor;
+				const view = leaf.view;
+				const editor = view.editor;
 				let targetLine = line;
 
 				const lineCount = editor.lineCount();
@@ -197,10 +199,10 @@ export class DailyNoteManager {
 						);
 
 						// Apply accent pulse animation to the active line element
-						const activeLineEl = leaf.view.containerEl.querySelector('.cm-activeLine');
+						const activeLineEl = view.containerEl.querySelector('.cm-activeLine');
 						if (activeLineEl) {
 							activeLineEl.classList.add('dnt-highlight-flash');
-							setTimeout(() => {
+							window.setTimeout(() => {
 								activeLineEl.classList.remove('dnt-highlight-flash');
 							}, 2000);
 						}
@@ -208,7 +210,7 @@ export class DailyNoteManager {
 						// Background tab: ensure we do NOT scrollIntoView or steal focus!
 						if (previousActiveLeaf && previousActiveLeaf !== leaf) {
 							this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
-							const parentTabs = (previousActiveLeaf as any).parent;
+							const parentTabs = (previousActiveLeaf as unknown as LeafWithParentTab).parent;
 							if (parentTabs && typeof parentTabs.selectTab === 'function') {
 								parentTabs.selectTab(previousActiveLeaf);
 							}
@@ -239,18 +241,15 @@ export class DailyNoteManager {
 		// Find target header line:
 		// Pass 1: exact match
 		let headerLineIndex = -1;
-		let headerLevel = 0;
 
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
 			if (!line) continue;
 			const match = line.match(/^(#{1,6})\s+(.+)$/);
 			if (match && match[1] && match[2]) {
-				const headingLevel = match[1].length;
 				const cleanHeading = match[2].toLowerCase().replace(/[*_`#[\]@]/g, '').trim();
 				if (cleanHeading === cleanTargetHeader) {
 					headerLineIndex = i;
-					headerLevel = headingLevel;
 					break;
 				}
 			}
@@ -265,11 +264,9 @@ export class DailyNoteManager {
 				if (!line) continue;
 				const match = line.match(/^(#{1,6})\s+(.+)$/);
 				if (match && match[1] && match[2]) {
-					const headingLevel = match[1].length;
 					const cleanHeading = match[2].toLowerCase().replace(/[*_`#[\]@]/g, '').trim();
 					if (wordRegex.test(cleanHeading)) {
 						headerLineIndex = i;
-						headerLevel = headingLevel;
 						break;
 					}
 				}

@@ -1,9 +1,10 @@
 import { App, Notice, TFile, moment } from 'obsidian';
 import { getAllDailyNotes, getDateFromFile } from 'obsidian-daily-notes-interface';
-import { Moment } from 'moment';
 import { DailyNoteManager } from './daily-note-manager';
 import { isRecurrenceDue } from './recurrence-parser';
 import type { RecurringBlueprint } from './types';
+
+type Moment = moment.Moment;
 
 export type { RecurringBlueprint };
 
@@ -13,7 +14,7 @@ export function formatCursiveTask(text: string): string {
 		return trimmed;
 	}
 	// Preserve trailing tags outside the asterisks: e.g. "*Task text* #mobile"
-	const tagMatch = trimmed.match(/^(.*?)((\s+#[a-zA-Z0-9_\-\/]+)+)$/);
+	const tagMatch = trimmed.match(/^(.*?)((\s+#[a-zA-Z0-9_\-/]+)+)$/);
 	if (tagMatch && tagMatch[1] && tagMatch[2]) {
 		const body = tagMatch[1].trim();
 		const tags = tagMatch[2];

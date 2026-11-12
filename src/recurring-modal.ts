@@ -34,27 +34,27 @@ export class RecurringTasksModal extends Modal {
 		contentEl.empty();
 
 		const titleEl = contentEl.createDiv({ cls: 'dnt-modal-title' });
-		titleEl.createEl('h3', { text: 'Recurring Task Blueprints' });
+		titleEl.createEl('h3', { text: 'Recurring task blueprints' });
 
 		// Add new recurring task form
 		const formContainer = contentEl.createDiv({ cls: 'dnt-recurring-form' });
-		formContainer.createEl('h4', { text: 'Add New Recurring Task' });
+		formContainer.createEl('h4', { text: 'Add new recurring task' });
 
 		let taskName = '';
 		let targetHeader = this.defaultHeader;
 		let recurrencePattern = 'every day';
 
 		new Setting(formContainer)
-			.setName('Task Description')
+			.setName('Task description')
 			.addText((text) =>
 				text
-					.setPlaceholder('e.g. Water plants, Dagbok!')
+					.setPlaceholder('E.g. Water plants, dagbok!')
 					.onChange((val) => (taskName = val.trim()))
 			);
 
 		const headerNames = this.templateParser.getHeaderNames();
 		new Setting(formContainer)
-			.setName('Target Header')
+			.setName('Target header')
 			.addDropdown((dropdown) => {
 				for (const h of headerNames) {
 					dropdown.addOption(h, h);
@@ -63,18 +63,18 @@ export class RecurringTasksModal extends Modal {
 			});
 
 		new Setting(formContainer)
-			.setName('Recurrence Rule (every X Y)')
-			.setDesc('e.g. "every day", "every 2 days", "every weekday", "every 3 weeks on friday"')
+			.setName('Recurrence rule (every X y)')
+			.setDesc('E.g. "every day", "every 2 days", "every weekday", "every 3 weeks on friday"')
 			.addText((text) => {
 				text
-					.setPlaceholder('every 2 days')
+					.setPlaceholder('Every 2 days')
 					.setValue(recurrencePattern)
 					.onChange((val) => (recurrencePattern = val.trim()));
 			});
 
 		new Setting(formContainer).addButton((btn) => {
 			btn
-				.setButtonText('Add Blueprint & Inject')
+				.setButtonText('Add blueprint & inject')
 				.setCta()
 				.onClick(async () => {
 					if (!taskName) {
@@ -103,13 +103,13 @@ export class RecurringTasksModal extends Modal {
 
 		// Existing blueprints list
 		const listContainer = contentEl.createDiv({ cls: 'dnt-recurring-list' });
-		listContainer.createEl('h4', { text: 'Active Blueprints' });
+		listContainer.createEl('h4', { text: 'Active blueprints' });
 
 		const blueprints = this.getBlueprints();
 		if (blueprints.length === 0) {
 			listContainer.createEl('p', {
 				cls: 'dnt-hint-text',
-				text: 'No recurring blueprints registered yet. Add one above or via NLP capture!',
+				text: 'No recurring blueprints registered yet. Add one above or via nlp capture!',
 			});
 			return;
 		}
@@ -124,8 +124,8 @@ export class RecurringTasksModal extends Modal {
 
 			itemSetting.addButton((btn) => {
 				btn
-					.setButtonText('Delete & Sweep Future')
-					.setWarning()
+					.setButtonText('Delete & sweep future')
+					.setClass('mod-warning')
 					.onClick(async () => {
 						const res = await this.recurringManager.cancelBlueprint(bp.id);
 						new Notice(
