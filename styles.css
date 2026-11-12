@@ -419,3 +419,18 @@
 	color: var(--color-purple, #a855f7) !important;
 	background-color: rgba(168, 85, 247, 0.12) !important;
 }
+
+/* Sub-setting Hierarchy Styles in Settings */
+.dnt-sub-setting {
+	padding-left: 20px !important;
+	border-left: 3px solid var(--interactive-accent) !important;
+	margin-left: 6px !important;
+	transition: all 0.2s ease;
+}
+
+.dnt-sub-setting-indent {
+	padding-left: 38px !important;
+	border-left: 3px solid var(--color-blue, #3b82f6) !important;
+	margin-left: 6px !important;
+	transition: all 0.2s ease;
+}

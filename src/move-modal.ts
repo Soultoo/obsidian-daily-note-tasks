@@ -333,7 +333,9 @@ export class MoveTaskModal extends Modal {
 				await this.dailyNoteManager.openAndHighlightTask(
 					res.file,
 					res.line,
-					taskTextToMove
+					taskTextToMove,
+					this.settings.openNoteInNewTab,
+					this.settings.swapToNewTab
 				);
 			}
 

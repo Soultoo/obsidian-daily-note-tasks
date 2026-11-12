@@ -27,7 +27,17 @@ await esbuild.build({
 						export function normalizePath(p) { return p; }
 						export class Plugin {}
 						export class Modal {}
-						export class PluginSettingTab {}
+						export class PluginSettingTab { constructor(app, plugin) { this.app = app; this.plugin = plugin; this.containerEl = { empty() {}, createEl() {}, createDiv() {} }; } }
+						export class Setting {
+							constructor(el) { this.settingEl = { style: {} }; }
+							setName() { return this; }
+							setDesc() { return this; }
+							addToggle() { return this; }
+							addDropdown() { return this; }
+							addText() { return this; }
+							addButton() { return this; }
+							setClass() { return this; }
+						}
 						export class MarkdownView {}
 					`,
 					resolveDir: process.cwd(),

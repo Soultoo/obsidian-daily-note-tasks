@@ -361,6 +361,12 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		if (this.settings.openNoteOnTaskAdd === undefined) {
 			this.settings.openNoteOnTaskAdd = false;
 		}
+		if (this.settings.openNoteInNewTab === undefined) {
+			this.settings.openNoteInNewTab = false;
+		}
+		if (this.settings.swapToNewTab === undefined) {
+			this.settings.swapToNewTab = true;
+		}
 		if (this.settings.reopenCaptureOnCodeBlock === undefined) {
 			this.settings.reopenCaptureOnCodeBlock = true;
 		}

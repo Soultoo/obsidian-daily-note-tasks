@@ -60,6 +60,8 @@ export interface PluginSettings {
 	italicizeRecurringTasks: boolean;
 	recurringBlueprints: RecurringBlueprint[];
 	openNoteOnTaskAdd: boolean;
+	openNoteInNewTab: boolean;
+	swapToNewTab: boolean;
 	reopenCaptureOnCodeBlock: boolean;
 }
 
@@ -74,5 +76,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	italicizeRecurringTasks: true,
 	recurringBlueprints: [],
 	openNoteOnTaskAdd: false,
+	openNoteInNewTab: false,
+	swapToNewTab: true,
 	reopenCaptureOnCodeBlock: true,
 };

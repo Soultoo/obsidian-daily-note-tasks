@@ -5,6 +5,8 @@ import { RecurringBlueprint, RecurringManager, formatCursiveTask } from '../src/
 import { isRecurrenceDue, parseRecurrenceFromText } from '../src/recurrence-parser';
 import { TaskAstParser } from '../src/task-ast';
 import { applyTimeToMovedTask } from '../src/move-modal';
+import { DailyNoteTasksSettingTab } from '../src/settings';
+import { DEFAULT_SETTINGS } from '../src/types';
 
 let passed = 0;
 let failed = 0;
@@ -403,6 +405,113 @@ console.log('\n--- 7. Open Note & Highlight Task Tests ---');
 	assertEqual(scrolledRange?.center, true, 'openAndHighlight: centered in viewport');
 }
 
+// Test 7.2: Open in new tab with swapToNewTab = true
+{
+	let getLeafArg = '';
+	let openFileOptions: any = null;
+	let activeLeafFocused = false;
+
+	const mockLeaf: any = {
+		view: Object.setPrototypeOf(
+			{
+				editor: {
+					lineCount: () => 1,
+					getLine: () => 'Task line',
+					setSelection: () => {},
+					scrollIntoView: () => {},
+				},
+				containerEl: { querySelector: () => null },
+			},
+			MarkdownView.prototype
+		),
+		openFile: async (_f: any, opts: any) => {
+			openFileOptions = opts;
+		},
+	};
+
+	const mockAppWithTab: any = {
+		vault: { process: async () => {}, getMarkdownFiles: () => [] },
+		workspace: {
+			getLeaf: (arg: string) => {
+				getLeafArg = arg;
+				return mockLeaf;
+			},
+			getLeavesOfType: () => [],
+			setActiveLeaf: () => {
+				activeLeafFocused = true;
+			},
+		},
+	};
+
+	const mgr = new DailyNoteManager(mockAppWithTab);
+	await mgr.openAndHighlightTask(
+		{ path: 'Daily/2026-11-12.md' } as any,
+		0,
+		'Task line',
+		true, // openInNewTab
+		true // swapToNewTab
+	);
+
+	assertEqual(getLeafArg, 'tab', 'openInNewTab: requested tab leaf');
+	assertEqual(openFileOptions?.active, true, 'openInNewTab: opened file as active');
+	assert(activeLeafFocused, 'openInNewTab: swapped to new tab');
+}
+
+// Test 7.3: Open in new tab with swapToNewTab = false
+{
+	let openFileOptions: any = null;
+	let activatedLeaf: any = null;
+
+	const previousLeaf: any = {
+		id: 'previous-leaf',
+		parent: { selectTab: () => {} },
+	};
+
+	const newLeaf: any = {
+		id: 'new-tab-leaf',
+		view: Object.setPrototypeOf(
+			{
+				editor: {
+					lineCount: () => 1,
+					getLine: () => 'Task line',
+					setSelection: () => {},
+					scrollIntoView: () => {},
+				},
+				containerEl: { querySelector: () => null },
+			},
+			MarkdownView.prototype
+		),
+		openFile: async (_f: any, opts: any) => {
+			openFileOptions = opts;
+		},
+	};
+
+	const mockAppWithTab: any = {
+		vault: { process: async () => {}, getMarkdownFiles: () => [] },
+		workspace: {
+			getActiveViewOfType: () => ({ leaf: previousLeaf }),
+			getMostRecentLeaf: () => previousLeaf,
+			getLeaf: () => newLeaf,
+			getLeavesOfType: () => [],
+			setActiveLeaf: (l: any) => {
+				activatedLeaf = l;
+			},
+		},
+	};
+
+	const mgr = new DailyNoteManager(mockAppWithTab);
+	await mgr.openAndHighlightTask(
+		{ path: 'Daily/2026-11-12.md' } as any,
+		0,
+		'Task line',
+		true, // openInNewTab
+		false // swapToNewTab (stay in current tab)
+	);
+
+	assertEqual(openFileOptions?.active, false, 'openInNewTab background: opened file as inactive');
+	assertEqual(activatedLeaf?.id, 'previous-leaf', 'openInNewTab background: kept previous tab active');
+}
+
 // ----------------------------------------------------
 // 8. Code Block Parser & Prompt Tests
 // ----------------------------------------------------
@@ -452,6 +561,50 @@ function parseCodeBlockParams(source: string) {
 	const params = parseCodeBlockParams(source);
 	assertEqual(params.explicitNote, '', 'codeblock empty: note is empty string');
 	assertEqual(params.targetHeader, '', 'codeblock empty: header is empty string');
+}
+
+// ----------------------------------------------------
+// 9. Declarative Settings Search API Definitions Tests
+// ----------------------------------------------------
+console.log('\n--- 9. Declarative Settings Search API Definitions Tests ---');
+
+{
+	const mockPlugin: any = {
+		settings: {
+			...DEFAULT_SETTINGS,
+			openNoteOnTaskAdd: true,
+			openNoteInNewTab: false,
+			swapToNewTab: true,
+		},
+		templateParser: {
+			getHeaderNames: () => ['Written plan', 'Todos'],
+		},
+		saveSettings: async () => {},
+	};
+
+	const tab = new DailyNoteTasksSettingTab({} as any, mockPlugin);
+	const defs = tab.getSettingDefinitions();
+
+	assert(Array.isArray(defs), 'settings search: returned definitions array');
+	assert(defs.length > 5, 'settings search: contains multiple definitions');
+
+	const openNoteDef = defs.find((d: any) => d.control?.key === 'openNoteOnTaskAdd');
+	assert(openNoteDef !== undefined, 'settings search: includes openNoteOnTaskAdd definition');
+	assertEqual(openNoteDef?.name, 'Open Note on Task Add', 'settings search: openNoteOnTaskAdd name matches');
+
+	const newTabDef = defs.find((d: any) => d.control?.key === 'openNoteInNewTab');
+	assert(newTabDef !== undefined, 'settings search: includes openNoteInNewTab definition');
+	assertEqual(newTabDef?.name, 'In new tab', 'settings search: in new tab name matches');
+	assertEqual(newTabDef?.visible(), true, 'settings search: in new tab visible when openNoteOnTaskAdd is true');
+
+	const swapTabDef = defs.find((d: any) => d.control?.key === 'swapToNewTab');
+	assert(swapTabDef !== undefined, 'settings search: includes swapToNewTab definition');
+	assertEqual(swapTabDef?.name, 'Swap to new tab', 'settings search: swap to new tab name matches');
+	assertEqual(swapTabDef?.visible(), false, 'settings search: swap to new tab hidden when openNoteInNewTab is false');
+
+	// Toggle openNoteInNewTab to true
+	mockPlugin.settings.openNoteInNewTab = true;
+	assertEqual(swapTabDef?.visible(), true, 'settings search: swap to new tab visible when openNoteInNewTab is true');
 }
 
 console.log(`\n=== ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===\n`);

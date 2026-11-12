@@ -4214,6 +4214,44 @@ var Vault = class {
 function normalizePath(p) {
   return p;
 }
+var Modal = class {
+};
+var PluginSettingTab = class {
+  constructor(app, plugin) {
+    this.app = app;
+    this.plugin = plugin;
+    this.containerEl = { empty() {
+    }, createEl() {
+    }, createDiv() {
+    } };
+  }
+};
+var Setting = class {
+  constructor(el) {
+    this.settingEl = { style: {} };
+  }
+  setName() {
+    return this;
+  }
+  setDesc() {
+    return this;
+  }
+  addToggle() {
+    return this;
+  }
+  addDropdown() {
+    return this;
+  }
+  addText() {
+    return this;
+  }
+  addButton() {
+    return this;
+  }
+  setClass() {
+    return this;
+  }
+};
 var MarkdownView = class {
 };
 
@@ -7294,6 +7332,33 @@ function parseDaysOfWeek(str) {
   }
   return days.length > 0 ? Array.from(new Set(days)) : [1];
 }
+function formatRecurrenceLabel(rule) {
+  if (rule.unit === "day") {
+    return rule.interval === 1 ? "Every day" : `Every ${rule.interval} days`;
+  }
+  if (rule.unit === "week") {
+    if (rule.daysOfWeek && rule.daysOfWeek.length === 5 && [1, 2, 3, 4, 5].every((d) => rule.daysOfWeek?.includes(d))) {
+      return "Every weekday";
+    }
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const daysStr = rule.daysOfWeek ? rule.daysOfWeek.map((d) => dayNames[d]).join(", ") : "";
+    if (rule.interval === 1) {
+      return daysStr ? `Every ${daysStr}` : "Every week";
+    }
+    return daysStr ? `Every ${rule.interval} weeks on ${daysStr}` : `Every ${rule.interval} weeks`;
+  }
+  if (rule.unit === "month") {
+    const suffix = getOrdinalSuffix(rule.dayOfMonth ?? 1);
+    const dayStr = `${rule.dayOfMonth ?? 1}${suffix}`;
+    return rule.interval === 1 ? `Every month on the ${dayStr}` : `Every ${rule.interval} months on the ${dayStr}`;
+  }
+  return `Every ${rule.interval} ${rule.unit}s`;
+}
+function getOrdinalSuffix(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0] || "th";
+}
 
 // src/parser.ts
 function createCustomChrono() {
@@ -7751,15 +7816,31 @@ var DailyNoteManager = class {
   /**
    * Opens the given file and highlights (selects) the task at the given line, scrolling it into view.
    */
-  async openAndHighlightTask(file, line, taskContent) {
+  async openAndHighlightTask(file, line, taskContent, openInNewTab = false, swapToNewTab = true) {
     try {
-      let leaf = this.app.workspace.getLeavesOfType("markdown").find((l) => {
-        return l.view instanceof MarkdownView && l.view.file?.path === file.path;
-      });
-      if (!leaf) {
-        leaf = this.app.workspace.getLeaf(false);
-        await leaf.openFile(file);
+      const previousActiveLeaf = (typeof this.app.workspace?.getActiveViewOfType === "function" ? this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf : null) || (typeof this.app.workspace?.getMostRecentLeaf === "function" ? this.app.workspace.getMostRecentLeaf() : null) || this.app.workspace?.activeLeaf;
+      let leaf;
+      if (openInNewTab) {
+        leaf = this.app.workspace.getLeaf("tab");
+        await leaf.openFile(file, {
+          active: swapToNewTab,
+          state: { mode: "source" }
+        });
+        if (!swapToNewTab && previousActiveLeaf && previousActiveLeaf !== leaf) {
+          this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+          const parentTabs = previousActiveLeaf.parent;
+          if (parentTabs && typeof parentTabs.selectTab === "function") {
+            parentTabs.selectTab(previousActiveLeaf);
+          }
+        }
       } else {
+        leaf = this.app.workspace.getLeavesOfType("markdown").find((l) => {
+          return l.view instanceof MarkdownView && l.view.file?.path === file.path;
+        });
+        if (!leaf) {
+          leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(file, { active: true });
+        }
         this.app.workspace.setActiveLeaf(leaf, { focus: true });
       }
       if (!(leaf.view instanceof MarkdownView)) {
@@ -7787,19 +7868,30 @@ var DailyNoteManager = class {
             { line: targetLine, ch: 0 },
             { line: targetLine, ch: lineLength }
           );
-          editor.scrollIntoView(
-            {
-              from: { line: targetLine, ch: 0 },
-              to: { line: targetLine, ch: lineLength }
-            },
-            true
-          );
-          const activeLineEl = leaf.view.containerEl.querySelector(".cm-activeLine");
-          if (activeLineEl) {
-            activeLineEl.classList.add("dnt-highlight-flash");
-            setTimeout(() => {
-              activeLineEl.classList.remove("dnt-highlight-flash");
-            }, 2e3);
+          if (swapToNewTab) {
+            this.app.workspace.setActiveLeaf(leaf, { focus: true });
+            editor.scrollIntoView(
+              {
+                from: { line: targetLine, ch: 0 },
+                to: { line: targetLine, ch: lineLength }
+              },
+              true
+            );
+            const activeLineEl = leaf.view.containerEl.querySelector(".cm-activeLine");
+            if (activeLineEl) {
+              activeLineEl.classList.add("dnt-highlight-flash");
+              setTimeout(() => {
+                activeLineEl.classList.remove("dnt-highlight-flash");
+              }, 2e3);
+            }
+          } else {
+            if (previousActiveLeaf && previousActiveLeaf !== leaf) {
+              this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+              const parentTabs = previousActiveLeaf.parent;
+              if (parentTabs && typeof parentTabs.selectTab === "function") {
+                parentTabs.selectTab(previousActiveLeaf);
+              }
+            }
           }
         }
       }
@@ -8039,6 +8131,369 @@ function applyTimeToMovedTask(fullText, timeStr, position = "prefix") {
   lines[0] = firstLine;
   return lines.join("\n");
 }
+
+// src/recurring-modal.ts
+var RecurringTasksModal = class extends Modal {
+  constructor(app, recurringManager, templateParser, defaultHeader, getBlueprints) {
+    super(app);
+    this.recurringManager = recurringManager;
+    this.templateParser = templateParser;
+    this.defaultHeader = defaultHeader;
+    this.getBlueprints = getBlueprints;
+  }
+  onOpen() {
+    this.render();
+  }
+  render() {
+    const { contentEl, modalEl } = this;
+    modalEl.addClass("dnt-capture-modal");
+    contentEl.empty();
+    const titleEl = contentEl.createDiv({ cls: "dnt-modal-title" });
+    titleEl.createEl("h3", { text: "Recurring Task Blueprints" });
+    const formContainer = contentEl.createDiv({ cls: "dnt-recurring-form" });
+    formContainer.createEl("h4", { text: "Add New Recurring Task" });
+    let taskName = "";
+    let targetHeader = this.defaultHeader;
+    let recurrencePattern = "every day";
+    new Setting(formContainer).setName("Task Description").addText(
+      (text) => text.setPlaceholder("e.g. Water plants, Dagbok!").onChange((val) => taskName = val.trim())
+    );
+    const headerNames = this.templateParser.getHeaderNames();
+    new Setting(formContainer).setName("Target Header").addDropdown((dropdown) => {
+      for (const h of headerNames) {
+        dropdown.addOption(h, h);
+      }
+      dropdown.setValue(targetHeader).onChange((val) => targetHeader = val);
+    });
+    new Setting(formContainer).setName("Recurrence Rule (every X Y)").setDesc('e.g. "every day", "every 2 days", "every weekday", "every 3 weeks on friday"').addText((text) => {
+      text.setPlaceholder("every 2 days").setValue(recurrencePattern).onChange((val) => recurrencePattern = val.trim());
+    });
+    new Setting(formContainer).addButton((btn) => {
+      btn.setButtonText("Add Blueprint & Inject").setCta().onClick(async () => {
+        if (!taskName) {
+          new Notice("Please provide a task description.");
+          return;
+        }
+        const parsedRec = parseRecurrenceFromText(recurrencePattern);
+        if (!parsedRec.rule) {
+          new Notice('Could not understand recurrence pattern. Try "every 2 days" or "every weekday".');
+          return;
+        }
+        const res = await this.recurringManager.addBlueprint({
+          name: taskName,
+          header: targetHeader,
+          rule: parsedRec.rule
+        });
+        new Notice(
+          `Added recurring blueprint "${taskName}" (${formatRecurrenceLabel(parsedRec.rule)}). Injected into ${res.injectedCount} daily note(s).`
+        );
+        this.render();
+      });
+    });
+    const listContainer = contentEl.createDiv({ cls: "dnt-recurring-list" });
+    listContainer.createEl("h4", { text: "Active Blueprints" });
+    const blueprints = this.getBlueprints();
+    if (blueprints.length === 0) {
+      listContainer.createEl("p", {
+        cls: "dnt-hint-text",
+        text: "No recurring blueprints registered yet. Add one above or via NLP capture!"
+      });
+      return;
+    }
+    for (const bp of blueprints) {
+      const label = formatRecurrenceLabel(bp.rule);
+      const cursivePreview = formatCursiveTask(bp.name);
+      const itemSetting = new Setting(listContainer).setName(`- [ ] ${cursivePreview}`).setDesc(`Section: @${bp.header} \u2022 Schedule: ${label}`);
+      itemSetting.addButton((btn) => {
+        btn.setButtonText("Delete & Sweep Future").setWarning().onClick(async () => {
+          const res = await this.recurringManager.cancelBlueprint(bp.id);
+          new Notice(
+            `Removed "${bp.name}". Swept and deleted ${res.removedCount} future orphaned instance(s).`
+          );
+          this.render();
+        });
+      });
+    }
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
+// src/settings.ts
+var DailyNoteTasksSettingTab = class extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "Daily Note Tasks Settings" });
+    const headerNames = this.plugin.templateParser.getHeaderNames();
+    new Setting(containerEl).setName("Default Daily Note Section Header").setDesc("Tasks without a specified @section will be added under this header in Daily Notes.").addDropdown((dropdown) => {
+      for (const header of headerNames) {
+        dropdown.addOption(header, header);
+      }
+      if (!headerNames.includes(this.plugin.settings.defaultHeader)) {
+        dropdown.addOption(
+          this.plugin.settings.defaultHeader,
+          this.plugin.settings.defaultHeader
+        );
+      }
+      dropdown.setValue(this.plugin.settings.defaultHeader).onChange(async (value) => {
+        this.plugin.settings.defaultHeader = value;
+        await this.plugin.saveSettings();
+      });
+    }).addText((text) => {
+      text.setPlaceholder("Or type custom header...").setValue(this.plugin.settings.defaultHeader).onChange(async (value) => {
+        if (value.trim()) {
+          this.plugin.settings.defaultHeader = value.trim();
+          await this.plugin.saveSettings();
+        }
+      });
+    });
+    new Setting(containerEl).setName("Default Custom Note Header").setDesc('Header used when targeting a custom note (/note) without a specified @section (e.g. "Todos" creates "## Todos").').addText((text) => {
+      text.setPlaceholder("Todos").setValue(this.plugin.settings.defaultCustomNoteHeader || "Todos").onChange(async (value) => {
+        this.plugin.settings.defaultCustomNoteHeader = value.trim() || "Todos";
+        await this.plugin.saveSettings();
+      });
+    });
+    containerEl.createEl("h3", { text: "Time Formatting" });
+    new Setting(containerEl).setName("Time Format").setDesc('Format used when a natural language time is typed (e.g. "HH:mm" for 17:00 or "h:mm a" for 5:00 PM).').addText(
+      (text) => text.setPlaceholder("HH:mm").setValue(this.plugin.settings.timeFormat || "HH:mm").onChange(async (value) => {
+        this.plugin.settings.timeFormat = value.trim() || "HH:mm";
+        await this.plugin.saveSettings();
+      })
+    );
+    new Setting(containerEl).setName("Time Placement").setDesc("Where parsed times should be placed in the task bullet.").addDropdown((dropdown) => {
+      dropdown.addOption("natural", "Natural: keep where typed in sentence").addOption("prefix", "Prefix: - [ ] 17:00 Buy groceries").addOption("suffix", "Suffix: - [ ] Buy groceries 17:00").setValue(this.plugin.settings.timePosition || "natural").onChange(async (value) => {
+        this.plugin.settings.timePosition = value;
+        await this.plugin.saveSettings();
+      });
+    });
+    containerEl.createEl("h3", { text: "Capture Behavior" });
+    let inNewTabSetting;
+    let swapToNewTabSetting;
+    const updateSubSettingsVisibility = () => {
+      const isOpenNote = this.plugin.settings.openNoteOnTaskAdd === true;
+      const isInNewTab = this.plugin.settings.openNoteInNewTab === true;
+      if (inNewTabSetting) {
+        inNewTabSetting.settingEl.style.display = isOpenNote ? "" : "none";
+      }
+      if (swapToNewTabSetting) {
+        swapToNewTabSetting.settingEl.style.display = isOpenNote && isInNewTab ? "" : "none";
+      }
+    };
+    new Setting(containerEl).setName("Open Note on Task Add").setDesc("Automatically open the target note and highlight (select) the newly added task.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.openNoteOnTaskAdd === true).onChange(async (value) => {
+        this.plugin.settings.openNoteOnTaskAdd = value;
+        await this.plugin.saveSettings();
+        updateSubSettingsVisibility();
+      });
+    });
+    inNewTabSetting = new Setting(containerEl).setName("In new tab").setDesc("Open the note in a new tab instead of the current active tab.").setClass("dnt-sub-setting").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.openNoteInNewTab === true).onChange(async (value) => {
+        this.plugin.settings.openNoteInNewTab = value;
+        await this.plugin.saveSettings();
+        updateSubSettingsVisibility();
+      });
+    });
+    swapToNewTabSetting = new Setting(containerEl).setName("Swap to new tab").setDesc("Automatically focus and switch to the newly opened tab.").setClass("dnt-sub-setting-indent").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.swapToNewTab !== false).onChange(async (value) => {
+        this.plugin.settings.swapToNewTab = value;
+        await this.plugin.saveSettings();
+      });
+    });
+    updateSubSettingsVisibility();
+    new Setting(containerEl).setName("Reopen Capture for Code Block Button").setDesc(
+      'When adding a task via an inline "+ Add Task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.'
+    ).addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.reopenCaptureOnCodeBlock !== false).onChange(async (value) => {
+        this.plugin.settings.reopenCaptureOnCodeBlock = value;
+        await this.plugin.saveSettings();
+      });
+    });
+    containerEl.createEl("h3", { text: "Recurring Tasks" });
+    new Setting(containerEl).setName("Italicize Recurring Tasks").setDesc("Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *Task name*).").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.italicizeRecurringTasks !== false).onChange(async (value) => {
+        this.plugin.settings.italicizeRecurringTasks = value;
+        await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName("Manage Recurring Tasks").setDesc(
+      `Manage active recurring blueprints (${this.plugin.settings.recurringBlueprints.length} active). Injects tasks when daily notes are created and sweeps future notes upon cancellation.`
+    ).addButton((button) => {
+      button.setButtonText("Open Manager").onClick(() => {
+        new RecurringTasksModal(
+          this.app,
+          this.plugin.recurringManager,
+          this.plugin.templateParser,
+          this.plugin.settings.defaultHeader,
+          () => this.plugin.settings.recurringBlueprints
+        ).open();
+      });
+    });
+    containerEl.createEl("h3", { text: "Autocomplete & Recents" });
+    const recentsCount = this.plugin.settings.recentHeaders.length;
+    new Setting(containerEl).setName("Recent Sections (@)").setDesc(
+      recentsCount > 0 ? `Recently used: ${this.plugin.settings.recentHeaders.join(", ")}` : "No recent sections recorded yet."
+    ).addButton((button) => {
+      button.setButtonText("Clear Recent Sections").onClick(async () => {
+        this.plugin.settings.recentHeaders = [];
+        await this.plugin.saveSettings();
+        this.display();
+      });
+    });
+    const recentNotesCount = (this.plugin.settings.recentNotes || []).length;
+    new Setting(containerEl).setName("Recent Target Notes (/)").setDesc(
+      recentNotesCount > 0 ? `Recently used: ${this.plugin.settings.recentNotes.join(", ")}` : "No recent target notes recorded yet."
+    ).addButton((button) => {
+      button.setButtonText("Clear Recent Notes").onClick(async () => {
+        this.plugin.settings.recentNotes = [];
+        await this.plugin.saveSettings();
+        this.display();
+      });
+    });
+    new Setting(containerEl).setName("Reload Template Headers").setDesc("Re-scans the Daily Note Template file to update available section headers.").addButton((button) => {
+      button.setButtonText("Reload Headers").onClick(async () => {
+        await this.plugin.templateParser.loadHeaders();
+        this.display();
+      });
+    });
+  }
+  /**
+   * Declarative settings definitions used by Obsidian v1.13+ settings search indexing.
+   * Exposes all settings titles, descriptions, and controls directly to Obsidian's native search bar.
+   */
+  getSettingDefinitions() {
+    const headerNames = this.plugin.templateParser.getHeaderNames();
+    const headerOptions = {};
+    for (const h of headerNames) {
+      headerOptions[h] = h;
+    }
+    if (!headerOptions[this.plugin.settings.defaultHeader]) {
+      headerOptions[this.plugin.settings.defaultHeader] = this.plugin.settings.defaultHeader;
+    }
+    return [
+      {
+        type: "heading",
+        name: "Sections & Templates"
+      },
+      {
+        name: "Default Daily Note Section Header",
+        desc: "Tasks without a specified @section will be added under this header in Daily Notes.",
+        control: {
+          type: "dropdown",
+          key: "defaultHeader",
+          options: headerOptions
+        }
+      },
+      {
+        name: "Default Custom Note Header",
+        desc: 'Header used when targeting a custom note (/note) without a specified @section (e.g. "Todos" creates "## Todos").',
+        control: {
+          type: "text",
+          key: "defaultCustomNoteHeader",
+          placeholder: "Todos"
+        }
+      },
+      {
+        type: "heading",
+        name: "Time Formatting"
+      },
+      {
+        name: "Time Format",
+        desc: 'Format used when a natural language time is typed (e.g. "HH:mm" for 17:00 or "h:mm a" for 5:00 PM).',
+        control: {
+          type: "text",
+          key: "timeFormat",
+          placeholder: "HH:mm"
+        }
+      },
+      {
+        name: "Time Placement",
+        desc: "Where parsed times should be placed in the task bullet.",
+        control: {
+          type: "dropdown",
+          key: "timePosition",
+          options: {
+            natural: "Natural: keep where typed in sentence",
+            prefix: "Prefix: - [ ] 17:00 Buy groceries",
+            suffix: "Suffix: - [ ] Buy groceries 17:00"
+          }
+        }
+      },
+      {
+        type: "heading",
+        name: "Capture Behavior"
+      },
+      {
+        name: "Open Note on Task Add",
+        desc: "Automatically open the target note and highlight (select) the newly added task.",
+        control: {
+          type: "toggle",
+          key: "openNoteOnTaskAdd"
+        }
+      },
+      {
+        name: "In new tab",
+        desc: "Open the note in a new tab instead of the current active tab.",
+        visible: () => this.plugin.settings.openNoteOnTaskAdd,
+        control: {
+          type: "toggle",
+          key: "openNoteInNewTab"
+        }
+      },
+      {
+        name: "Swap to new tab",
+        desc: "Automatically focus and switch to the newly opened tab.",
+        visible: () => this.plugin.settings.openNoteOnTaskAdd && this.plugin.settings.openNoteInNewTab,
+        control: {
+          type: "toggle",
+          key: "swapToNewTab"
+        }
+      },
+      {
+        name: "Reopen Capture for Code Block Button",
+        desc: 'When adding a task via an inline "+ Add Task" code block button, automatically reopen the capture pane after adding each task to allow rapid sequential task entry.',
+        control: {
+          type: "toggle",
+          key: "reopenCaptureOnCodeBlock"
+        }
+      },
+      {
+        type: "heading",
+        name: "Recurring Tasks"
+      },
+      {
+        name: "Italicize Recurring Tasks",
+        desc: "Format recurring tasks in italics (cursive), matching vault template style (e.g. - [ ] *Task name*).",
+        control: {
+          type: "toggle",
+          key: "italicizeRecurringTasks"
+        }
+      }
+    ];
+  }
+};
+
+// src/types.ts
+var DEFAULT_SETTINGS = {
+  defaultHeader: "Written plan",
+  defaultCustomNoteHeader: "Todos",
+  dateFormat: "YYYY-MM-DD",
+  timeFormat: "HH:mm",
+  timePosition: "natural",
+  recentHeaders: [],
+  recentNotes: [],
+  italicizeRecurringTasks: true,
+  recurringBlueprints: [],
+  openNoteOnTaskAdd: false,
+  openNoteInNewTab: false,
+  swapToNewTab: true,
+  reopenCaptureOnCodeBlock: true
+};
 
 // tests/suite.ts
 var passed = 0;
@@ -8361,6 +8816,111 @@ console.log("\n--- 7. Open Note & Highlight Task Tests ---");
   assert(scrolledRange !== null, "openAndHighlight: scrollIntoView called");
   assertEqual(scrolledRange?.center, true, "openAndHighlight: centered in viewport");
 }
+{
+  let getLeafArg = "";
+  let openFileOptions = null;
+  let activeLeafFocused = false;
+  const mockLeaf = {
+    view: Object.setPrototypeOf(
+      {
+        editor: {
+          lineCount: () => 1,
+          getLine: () => "Task line",
+          setSelection: () => {
+          },
+          scrollIntoView: () => {
+          }
+        },
+        containerEl: { querySelector: () => null }
+      },
+      MarkdownView.prototype
+    ),
+    openFile: async (_f, opts) => {
+      openFileOptions = opts;
+    }
+  };
+  const mockAppWithTab = {
+    vault: { process: async () => {
+    }, getMarkdownFiles: () => [] },
+    workspace: {
+      getLeaf: (arg) => {
+        getLeafArg = arg;
+        return mockLeaf;
+      },
+      getLeavesOfType: () => [],
+      setActiveLeaf: () => {
+        activeLeafFocused = true;
+      }
+    }
+  };
+  const mgr = new DailyNoteManager(mockAppWithTab);
+  await mgr.openAndHighlightTask(
+    { path: "Daily/2026-11-12.md" },
+    0,
+    "Task line",
+    true,
+    // openInNewTab
+    true
+    // swapToNewTab
+  );
+  assertEqual(getLeafArg, "tab", "openInNewTab: requested tab leaf");
+  assertEqual(openFileOptions?.active, true, "openInNewTab: opened file as active");
+  assert(activeLeafFocused, "openInNewTab: swapped to new tab");
+}
+{
+  let openFileOptions = null;
+  let activatedLeaf = null;
+  const previousLeaf = {
+    id: "previous-leaf",
+    parent: { selectTab: () => {
+    } }
+  };
+  const newLeaf = {
+    id: "new-tab-leaf",
+    view: Object.setPrototypeOf(
+      {
+        editor: {
+          lineCount: () => 1,
+          getLine: () => "Task line",
+          setSelection: () => {
+          },
+          scrollIntoView: () => {
+          }
+        },
+        containerEl: { querySelector: () => null }
+      },
+      MarkdownView.prototype
+    ),
+    openFile: async (_f, opts) => {
+      openFileOptions = opts;
+    }
+  };
+  const mockAppWithTab = {
+    vault: { process: async () => {
+    }, getMarkdownFiles: () => [] },
+    workspace: {
+      getActiveViewOfType: () => ({ leaf: previousLeaf }),
+      getMostRecentLeaf: () => previousLeaf,
+      getLeaf: () => newLeaf,
+      getLeavesOfType: () => [],
+      setActiveLeaf: (l) => {
+        activatedLeaf = l;
+      }
+    }
+  };
+  const mgr = new DailyNoteManager(mockAppWithTab);
+  await mgr.openAndHighlightTask(
+    { path: "Daily/2026-11-12.md" },
+    0,
+    "Task line",
+    true,
+    // openInNewTab
+    false
+    // swapToNewTab (stay in current tab)
+  );
+  assertEqual(openFileOptions?.active, false, "openInNewTab background: opened file as inactive");
+  assertEqual(activatedLeaf?.id, "previous-leaf", "openInNewTab background: kept previous tab active");
+}
 console.log("\n--- 8. Code Block Parser & Prompt Tests ---");
 function parseCodeBlockParams(source) {
   let targetHeader = "";
@@ -8398,6 +8958,39 @@ function parseCodeBlockParams(source) {
   const params = parseCodeBlockParams(source);
   assertEqual(params.explicitNote, "", "codeblock empty: note is empty string");
   assertEqual(params.targetHeader, "", "codeblock empty: header is empty string");
+}
+console.log("\n--- 9. Declarative Settings Search API Definitions Tests ---");
+{
+  const mockPlugin = {
+    settings: {
+      ...DEFAULT_SETTINGS,
+      openNoteOnTaskAdd: true,
+      openNoteInNewTab: false,
+      swapToNewTab: true
+    },
+    templateParser: {
+      getHeaderNames: () => ["Written plan", "Todos"]
+    },
+    saveSettings: async () => {
+    }
+  };
+  const tab = new DailyNoteTasksSettingTab({}, mockPlugin);
+  const defs = tab.getSettingDefinitions();
+  assert(Array.isArray(defs), "settings search: returned definitions array");
+  assert(defs.length > 5, "settings search: contains multiple definitions");
+  const openNoteDef = defs.find((d) => d.control?.key === "openNoteOnTaskAdd");
+  assert(openNoteDef !== void 0, "settings search: includes openNoteOnTaskAdd definition");
+  assertEqual(openNoteDef?.name, "Open Note on Task Add", "settings search: openNoteOnTaskAdd name matches");
+  const newTabDef = defs.find((d) => d.control?.key === "openNoteInNewTab");
+  assert(newTabDef !== void 0, "settings search: includes openNoteInNewTab definition");
+  assertEqual(newTabDef?.name, "In new tab", "settings search: in new tab name matches");
+  assertEqual(newTabDef?.visible(), true, "settings search: in new tab visible when openNoteOnTaskAdd is true");
+  const swapTabDef = defs.find((d) => d.control?.key === "swapToNewTab");
+  assert(swapTabDef !== void 0, "settings search: includes swapToNewTab definition");
+  assertEqual(swapTabDef?.name, "Swap to new tab", "settings search: swap to new tab name matches");
+  assertEqual(swapTabDef?.visible(), false, "settings search: swap to new tab hidden when openNoteInNewTab is false");
+  mockPlugin.settings.openNoteInNewTab = true;
+  assertEqual(swapTabDef?.visible(), true, "settings search: swap to new tab visible when openNoteInNewTab is true");
 }
 console.log(`
 === ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===

@@ -105,18 +105,47 @@ export class DailyNoteManager {
 	public async openAndHighlightTask(
 		file: TFile,
 		line: number,
-		taskContent?: string
+		taskContent?: string,
+		openInNewTab = false,
+		swapToNewTab = true
 	): Promise<void> {
 		try {
-			// Find existing leaf displaying this file or open/reuse one
-			let leaf = this.app.workspace.getLeavesOfType('markdown').find((l) => {
-				return l.view instanceof MarkdownView && l.view.file?.path === file.path;
-			});
+			// Record currently active leaf before creating new tab
+			const previousActiveLeaf =
+				(typeof this.app.workspace?.getActiveViewOfType === 'function'
+					? this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf
+					: null) ||
+				(typeof this.app.workspace?.getMostRecentLeaf === 'function'
+					? this.app.workspace.getMostRecentLeaf()
+					: null) ||
+				(this.app.workspace as any)?.activeLeaf;
 
-			if (!leaf) {
-				leaf = this.app.workspace.getLeaf(false);
-				await leaf.openFile(file);
+			let leaf: any;
+
+			if (openInNewTab) {
+				leaf = this.app.workspace.getLeaf('tab');
+				await leaf.openFile(file, {
+					active: swapToNewTab,
+					state: { mode: 'source' },
+				});
+
+				if (!swapToNewTab && previousActiveLeaf && previousActiveLeaf !== leaf) {
+					this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+					const parentTabs = (previousActiveLeaf as any).parent;
+					if (parentTabs && typeof parentTabs.selectTab === 'function') {
+						parentTabs.selectTab(previousActiveLeaf);
+					}
+				}
 			} else {
+				// Find existing leaf displaying this file or open/reuse one
+				leaf = this.app.workspace.getLeavesOfType('markdown').find((l) => {
+					return l.view instanceof MarkdownView && l.view.file?.path === file.path;
+				});
+
+				if (!leaf) {
+					leaf = this.app.workspace.getLeaf(false);
+					await leaf.openFile(file, { active: true });
+				}
 				this.app.workspace.setActiveLeaf(leaf, { focus: true });
 			}
 
@@ -156,21 +185,34 @@ export class DailyNoteManager {
 						{ line: targetLine, ch: 0 },
 						{ line: targetLine, ch: lineLength }
 					);
-					editor.scrollIntoView(
-						{
-							from: { line: targetLine, ch: 0 },
-							to: { line: targetLine, ch: lineLength },
-						},
-						true
-					);
 
-					// Apply accent pulse animation to the active line element
-					const activeLineEl = leaf.view.containerEl.querySelector('.cm-activeLine');
-					if (activeLineEl) {
-						activeLineEl.classList.add('dnt-highlight-flash');
-						setTimeout(() => {
-							activeLineEl.classList.remove('dnt-highlight-flash');
-						}, 2000);
+					if (swapToNewTab) {
+						this.app.workspace.setActiveLeaf(leaf, { focus: true });
+						editor.scrollIntoView(
+							{
+								from: { line: targetLine, ch: 0 },
+								to: { line: targetLine, ch: lineLength },
+							},
+							true
+						);
+
+						// Apply accent pulse animation to the active line element
+						const activeLineEl = leaf.view.containerEl.querySelector('.cm-activeLine');
+						if (activeLineEl) {
+							activeLineEl.classList.add('dnt-highlight-flash');
+							setTimeout(() => {
+								activeLineEl.classList.remove('dnt-highlight-flash');
+							}, 2000);
+						}
+					} else {
+						// Background tab: ensure we do NOT scrollIntoView or steal focus!
+						if (previousActiveLeaf && previousActiveLeaf !== leaf) {
+							this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+							const parentTabs = (previousActiveLeaf as any).parent;
+							if (parentTabs && typeof parentTabs.selectTab === 'function') {
+								parentTabs.selectTab(previousActiveLeaf);
+							}
+						}
 					}
 				}
 			}

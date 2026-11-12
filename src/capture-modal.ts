@@ -348,7 +348,13 @@ export class TaskCaptureModal extends Modal {
 				new Notice(`Added task to /${targetNoteName} under @${header}`);
 
 				if (this.settings.openNoteOnTaskAdd && res?.file) {
-					await this.dailyNoteManager.openAndHighlightTask(res.file, res.line, taskTextToInsert);
+					await this.dailyNoteManager.openAndHighlightTask(
+						res.file,
+						res.line,
+						taskTextToInsert,
+						this.settings.openNoteInNewTab,
+						this.settings.swapToNewTab
+					);
 				}
 
 				this.close();
@@ -387,7 +393,9 @@ export class TaskCaptureModal extends Modal {
 					await this.dailyNoteManager.openAndHighlightTask(
 						res.todayFile,
 						res.todayLine ?? 0,
-						taskTextToInsert
+						taskTextToInsert,
+						this.settings.openNoteInNewTab,
+						this.settings.swapToNewTab
 					);
 				}
 
@@ -411,7 +419,13 @@ export class TaskCaptureModal extends Modal {
 			new Notice(`Added task to ${targetDate.format('YYYY-MM-DD')} under @${targetHeader}`);
 
 			if (this.settings.openNoteOnTaskAdd && res?.file) {
-				await this.dailyNoteManager.openAndHighlightTask(res.file, res.line, taskTextToInsert);
+				await this.dailyNoteManager.openAndHighlightTask(
+					res.file,
+					res.line,
+					taskTextToInsert,
+					this.settings.openNoteInNewTab,
+					this.settings.swapToNewTab
+				);
 			}
 
 			this.close();
