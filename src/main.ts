@@ -11,6 +11,36 @@ import { TaskAstParser } from './task-ast';
 import { RecurringManager } from './recurring-manager';
 import { DEFAULT_SETTINGS, PluginSettings, RecurringBlueprint } from './types';
 
+export function formatPrefilledNote(note: string): string {
+	const trimmed = note.trim();
+	if (!trimmed) return '';
+	if (
+		(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+		(trimmed.startsWith("'") && trimmed.endsWith("'"))
+	) {
+		return `/${trimmed}`;
+	}
+	if (trimmed.includes(' ') || /[^\w\-/.]/.test(trimmed)) {
+		return `/"${trimmed}"`;
+	}
+	return `/${trimmed}`;
+}
+
+export function formatPrefilledHeader(header: string): string {
+	const trimmed = header.trim();
+	if (!trimmed) return '';
+	if (
+		(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+		(trimmed.startsWith("'") && trimmed.endsWith("'"))
+	) {
+		return `@${trimmed}`;
+	}
+	if (trimmed.includes(' ') || /[^\w\-/]/.test(trimmed)) {
+		return `@"${trimmed}"`;
+	}
+	return `@${trimmed}`;
+}
+
 export default class DailyNoteTasksPlugin extends Plugin {
 	settings!: PluginSettings;
 	templateParser!: TemplateParser;
@@ -199,12 +229,22 @@ export default class DailyNoteTasksPlugin extends Plugin {
 				btn.addEventListener('click', (e) => {
 					e.preventDefault();
 
+					const notePart = customNoteName ? formatPrefilledNote(customNoteName) : '';
+					const headerPart = targetHeader ? formatPrefilledHeader(targetHeader) : '';
+
+					let doc = '';
+					if (notePart && headerPart) {
+						doc = `${notePart} ${headerPart} `;
+					} else if (notePart) {
+						doc = `${notePart} `;
+					} else if (headerPart) {
+						doc = `${headerPart} `;
+					}
+
 					if (isDaily && dailyMoment) {
-						this.openCaptureModal(`@${targetHeader} `, dailyMoment, true);
-					} else if (customNoteName) {
-						this.openCaptureModal(`/${customNoteName} @${targetHeader} `, null, true);
+						this.openCaptureModal(doc, dailyMoment, true);
 					} else {
-						this.openCaptureModal(`@${targetHeader} `, null, true);
+						this.openCaptureModal(doc, null, true);
 					}
 				});
 			});

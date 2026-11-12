@@ -50,7 +50,7 @@ export function parseTaskInput(
 	let targetNoteText: string | null = null;
 	let targetNote: string | null = null;
 
-	const noteRegex = /(?:^|\s)\/(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_\-/.]+))([,;:.!?]*)/;
+	const noteRegex = /(?:^|\s)\/(?:"([^"]+)"|'([^']+)'|([^\s@#]+))([,;:.!?]*)/;
 	const noteMatch = input.match(noteRegex);
 	if (noteMatch && noteMatch.index !== undefined) {
 		const slashIndex = input.indexOf('/', noteMatch.index);
@@ -91,7 +91,7 @@ export function parseTaskInput(
 	}
 
 	if (!headerSpan) {
-		const genericRegex = /(?:^|\s)@(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_\-/]+))([,;:.!?]*)/;
+		const genericRegex = /(?:^|\s)@(?:"([^"]+)"|'([^']+)'|([^\s/#]+))([,;:.!?]*)/;
 		const match = input.match(genericRegex);
 		if (match && match.index !== undefined) {
 			const atIndex = input.indexOf('@', match.index);

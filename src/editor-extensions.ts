@@ -22,7 +22,7 @@ import { parseTaskInput } from './parser';
 import { ParsedTask, TemplateHeader } from './types';
 
 export interface EditorExtensionOptions {
-	getHeaders: () => TemplateHeader[];
+	getHeaders: (targetNoteName?: string | null) => TemplateHeader[];
 	getVaultNotes?: () => string[];
 	defaultHeader: string;
 	defaultCustomNoteHeader?: string;
@@ -31,6 +31,11 @@ export interface EditorExtensionOptions {
 	onParsedChange?: (parsed: ParsedTask) => void;
 	onSubmit: () => void;
 	onCancel: () => void;
+}
+
+function extractNoteNameFromDoc(docText: string): string | null {
+	const noteMatch = docText.match(/(?:^|\s)\/(?:"([^"]+)"|'([^']+)'|([^\s@#]+))/);
+	return noteMatch ? (noteMatch[1] || noteMatch[2] || noteMatch[3] || null) : null;
 }
 
 export function createCaptureEditorExtensions(options: EditorExtensionOptions): Extension[] {
@@ -59,9 +64,11 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 				if (update.docChanged || update.viewportChanged) {
 					this.decorations = this.buildDecorations(update.view);
 					if (onParsedChange && update.docChanged) {
-						const headerNames = getHeaders().map((h) => h.heading);
+						const docText = update.view.state.doc.toString();
+						const noteName = extractNoteNameFromDoc(docText);
+						const headerNames = getHeaders(noteName).map((h) => h.heading);
 						const parsed = parseTaskInput(
-							update.view.state.doc.toString(),
+							docText,
 							headerNames,
 							defaultHeader,
 							timeFormat,
@@ -76,7 +83,8 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 			buildDecorations(view: EditorView): DecorationSet {
 				const builder = new RangeSetBuilder<Decoration>();
 				const docText = view.state.doc.toString();
-				const headerNames = getHeaders().map((h) => h.heading);
+				const noteName = extractNoteNameFromDoc(docText);
+				const headerNames = getHeaders(noteName).map((h) => h.heading);
 				const parsed = parseTaskInput(
 					docText,
 					headerNames,
@@ -188,14 +196,14 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		override: [
 			(context: CompletionContext): CompletionResult | null => {
 				// Target note autocomplete on '/'
-				const noteWord = context.matchBefore(/\/[\w\s\-/.]*$/);
+				const noteWord = context.matchBefore(/\/[^\n@#]*$/);
 				if (noteWord) {
 					const notes = getVaultNotes();
 					return {
 						from: noteWord.from,
 						options: notes.map((name) => {
-							const hasSpaces = name.includes(' ');
-							const applyText = hasSpaces ? `/"${name}" ` : `/${name} `;
+							const hasSpacesOrSpecial = name.includes(' ') || /[^\w\-/.]/.test(name);
+							const applyText = hasSpacesOrSpecial ? `/"${name}" ` : `/${name} `;
 							return {
 								label: `/${name}`,
 								detail: 'Note',
@@ -207,19 +215,23 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 				}
 
 				// Header autocomplete on '@'
-				const headerWord = context.matchBefore(/@[\w\s\-/]*$/);
+				const headerWord = context.matchBefore(/@[^\n/]*$/);
 				if (headerWord) {
-					const headers = getHeaders();
+					const docText = context.state.doc.toString();
+					const noteName = extractNoteNameFromDoc(docText);
+					const headers = getHeaders(noteName);
 					return {
 						from: headerWord.from,
 						options: headers.map((h) => {
 							const detailText = h.isRecent
 								? `🕒 Recent • H${h.level}`
 								: `H${h.level}`;
+							const needsQuotes = h.heading.includes(' ') || /[^\w\-/]/.test(h.heading);
+							const applyText = needsQuotes ? `@"${h.heading}" ` : `@${h.heading} `;
 							return {
 								label: `@${h.heading}`,
 								detail: detailText,
-								apply: `@${h.heading} `,
+								apply: applyText,
 								type: 'keyword',
 							};
 						}),

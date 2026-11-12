@@ -118,8 +118,12 @@ export class DailyNoteManager {
 		try {
 			// Record currently active leaf before creating new tab
 			const previousActiveLeaf: WorkspaceLeaf | null =
-				this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf ??
-				this.app.workspace.getMostRecentLeaf();
+				(typeof this.app.workspace?.getActiveViewOfType === 'function'
+					? this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf
+					: null) ??
+				(typeof this.app.workspace?.getMostRecentLeaf === 'function'
+					? this.app.workspace.getMostRecentLeaf()
+					: null);
 
 			let leaf: WorkspaceLeaf;
 

@@ -7,7 +7,7 @@ import { DailyNoteManager } from './daily-note-manager';
 import { TemplateParser } from './template-parser';
 import { RecurringManager, formatCursiveTask } from './recurring-manager';
 import { formatRecurrenceLabel } from './recurrence-parser';
-import { ParsedTask, PluginSettings } from './types';
+import { ParsedTask, PluginSettings, TemplateHeader } from './types';
 
 export class TaskCaptureModal extends Modal {
 	private editorView: EditorView | null = null;
@@ -162,10 +162,14 @@ export class TaskCaptureModal extends Modal {
 		this.submitBtn.addEventListener('click', () => void this.submitTask());
 
 		// Initial badge display
+		const initialNoteMatch = this.initialDoc.match(/(?:^|\s)\/(?:"([^"]+)"|'([^']+)'|([^\s@#]+))/);
+		const initialNote = initialNoteMatch ? (initialNoteMatch[1] || initialNoteMatch[2] || initialNoteMatch[3]) : null;
+		const initialHeaders = this.getHeadersForNote(initialNote).map((h) => h.heading);
+
 		this.updatePreviewBadges(
 			parseTaskInput(
 				this.initialDoc,
-				this.templateParser.getHeaderNames(this.settings.recentHeaders),
+				initialHeaders,
 				this.settings.defaultHeader,
 				this.settings.timeFormat,
 				this.settings.timePosition,
@@ -175,7 +179,7 @@ export class TaskCaptureModal extends Modal {
 
 		// Initialize CodeMirror 6 Editor
 		const extensions = createCaptureEditorExtensions({
-			getHeaders: () => this.templateParser.getHeaders(this.settings.recentHeaders),
+			getHeaders: (noteName) => this.getHeadersForNote(noteName),
 			getVaultNotes: () => this.getVaultNoteNames(),
 			defaultHeader: this.settings.defaultHeader,
 			defaultCustomNoteHeader: this.settings.defaultCustomNoteHeader || 'Todos',
@@ -208,6 +212,57 @@ export class TaskCaptureModal extends Modal {
 				});
 			}
 		}, 30);
+	}
+
+	private getHeadersForNote(targetNote?: string | null): TemplateHeader[] {
+		const baseHeaders = this.templateParser.getHeaders(this.settings.recentHeaders);
+		if (!targetNote) {
+			return baseHeaders;
+		}
+
+		const cleanName = targetNote.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
+		const files = this.app.vault.getMarkdownFiles();
+		const targetFile = files.find(
+			(f) =>
+				f.basename.toLowerCase() === cleanName ||
+				f.path.toLowerCase() === cleanName
+		);
+
+		if (!targetFile) {
+			return baseHeaders;
+		}
+
+		const cache = this.app.metadataCache.getFileCache(targetFile);
+		if (!cache || !cache.headings || cache.headings.length === 0) {
+			return baseHeaders;
+		}
+
+		const noteHeaders: TemplateHeader[] = cache.headings.map((h) => ({
+			heading: h.heading.replace(/[*_`#[\]@]/g, '').trim(),
+			level: h.level,
+			fullText: `${'#'.repeat(h.level)} ${h.heading}`,
+		}));
+
+		const existingNames = new Set<string>();
+		const combined: TemplateHeader[] = [];
+
+		for (const h of noteHeaders) {
+			const lower = h.heading.toLowerCase();
+			if (!existingNames.has(lower)) {
+				existingNames.add(lower);
+				combined.push(h);
+			}
+		}
+
+		for (const h of baseHeaders) {
+			const lower = h.heading.toLowerCase();
+			if (!existingNames.has(lower)) {
+				existingNames.add(lower);
+				combined.push(h);
+			}
+		}
+
+		return combined;
 	}
 
 	private getVaultNoteNames(): string[] {
@@ -302,11 +357,15 @@ export class TaskCaptureModal extends Modal {
 			return;
 		}
 
+		const noteMatch = currentText.match(/(?:^|\s)\/(?:"([^"]+)"|'([^']+)'|([^\s@#]+))/);
+		const noteName = noteMatch ? (noteMatch[1] || noteMatch[2] || noteMatch[3]) : null;
+		const submitHeaders = this.getHeadersForNote(noteName).map((h) => h.heading);
+
 		const parsed =
 			this.currentParsed ||
 			parseTaskInput(
 				currentText,
-				this.templateParser.getHeaderNames(this.settings.recentHeaders),
+				submitHeaders,
 				this.settings.defaultHeader,
 				this.settings.timeFormat,
 				this.settings.timePosition,

@@ -1,4 +1,8 @@
 import { MarkdownView, moment } from 'obsidian';
+
+if (typeof (global as any).window === 'undefined') {
+	(global as any).window = global;
+}
 import { parseTaskInput } from '../src/parser';
 import { DailyNoteManager } from '../src/daily-note-manager';
 import { RecurringBlueprint, RecurringManager, formatCursiveTask } from '../src/recurring-manager';
@@ -67,6 +71,31 @@ console.log('--- 1. Target Note ("/note") Tests ---');
 	assertEqual(r.header, 'Work', 'target note: extracted @Work');
 	assertEqual(r.finalTaskText, 'Finish slides 14:00', 'target note: finalTaskText preserves time');
 	assertEqual(r.date?.format('YYYY-MM-DD'), moment().format('YYYY-MM-DD'), 'target note: date is today');
+}
+
+// Test 1.4: Quoted target note with spaces and emoji header
+{
+	const r = parseTaskInput('Fix critical bug /"Obsidian plugin development with agents" @"⚓ Anchor"', templateHeaders);
+	assertEqual(r.targetNote, 'Obsidian plugin development with agents', 'target note: extracted quoted note with spaces');
+	assertEqual(r.header, '⚓ Anchor', 'target note: extracted quoted header with emoji and spaces');
+	assertEqual(r.cleanText, 'Fix critical bug', 'target note: cleanText is clean');
+}
+
+// Test 1.5: Target note with quoted Swedish header
+{
+	const r = parseTaskInput('mjölk /Groceries @"Ej mataffär"', templateHeaders);
+	assertEqual(r.targetNote, 'Groceries', 'target note: extracted /Groceries');
+	assertEqual(r.header, 'Ej mataffär', 'target note: extracted @"Ej mataffär"');
+	assertEqual(r.cleanText, 'mjölk', 'target note: cleanText does not contain header text');
+}
+
+// Test 1.6: Dynamic note headers (unquoted header with spaces matched against note headers)
+{
+	const groceriesHeaders = ['Ej mataffär', 'Frukt & Grönt', 'Mejeri', ...templateHeaders];
+	const r = parseTaskInput('/Groceries @Ej mataffär köpa smör', groceriesHeaders);
+	assertEqual(r.targetNote, 'Groceries', 'target note: extracted /Groceries');
+	assertEqual(r.header, 'Ej mataffär', 'target note: matched unquoted @Ej mataffär from note headers');
+	assertEqual(r.cleanText, 'köpa smör', 'target note: cleanText is solely the task text');
 }
 
 // ----------------------------------------------------
@@ -586,18 +615,20 @@ console.log('\n--- 9. Declarative Settings Search API Definitions Tests ---');
 	const defs = tab.getSettingDefinitions();
 
 	assert(Array.isArray(defs), 'settings search: returned definitions array');
-	assert(defs.length > 5, 'settings search: contains multiple definitions');
 
-	const openNoteDef = defs.find((d: any) => d.control?.key === 'openNoteOnTaskAdd');
+	const allItems = defs.flatMap((d: any) => (d.items ? d.items : [d]));
+	assert(allItems.length > 5, 'settings search: contains multiple definitions');
+
+	const openNoteDef = allItems.find((d: any) => d.control?.key === 'openNoteOnTaskAdd');
 	assert(openNoteDef !== undefined, 'settings search: includes openNoteOnTaskAdd definition');
-	assertEqual(openNoteDef?.name, 'Open Note on Task Add', 'settings search: openNoteOnTaskAdd name matches');
+	assertEqual(openNoteDef?.name, 'Open note on task add', 'settings search: openNoteOnTaskAdd name matches');
 
-	const newTabDef = defs.find((d: any) => d.control?.key === 'openNoteInNewTab');
+	const newTabDef = allItems.find((d: any) => d.control?.key === 'openNoteInNewTab');
 	assert(newTabDef !== undefined, 'settings search: includes openNoteInNewTab definition');
 	assertEqual(newTabDef?.name, 'In new tab', 'settings search: in new tab name matches');
 	assertEqual(newTabDef?.visible(), true, 'settings search: in new tab visible when openNoteOnTaskAdd is true');
 
-	const swapTabDef = defs.find((d: any) => d.control?.key === 'swapToNewTab');
+	const swapTabDef = allItems.find((d: any) => d.control?.key === 'swapToNewTab');
 	assert(swapTabDef !== undefined, 'settings search: includes swapToNewTab definition');
 	assertEqual(swapTabDef?.name, 'Swap to new tab', 'settings search: swap to new tab name matches');
 	assertEqual(swapTabDef?.visible(), false, 'settings search: swap to new tab hidden when openNoteInNewTab is false');

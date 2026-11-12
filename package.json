@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-daily-note-tasks",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Fluid, Todoist-style task manager for Obsidian using Daily Notes as single source of truth.",
 	"main": "main.js",
 	"type": "module",
