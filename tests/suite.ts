@@ -81,21 +81,73 @@ console.log('--- 1. Target Note ("/note") Tests ---');
 	assertEqual(r.cleanText, 'Fix critical bug', 'target note: cleanText is clean');
 }
 
-// Test 1.5: Target note with quoted Swedish header
+// Test 1.5: Target note with quoted multi-word header
 {
-	const r = parseTaskInput('mjölk /Groceries @"Ej mataffär"', templateHeaders);
+	const r = parseTaskInput('Milk /Groceries @"Non food items"', templateHeaders);
 	assertEqual(r.targetNote, 'Groceries', 'target note: extracted /Groceries');
-	assertEqual(r.header, 'Ej mataffär', 'target note: extracted @"Ej mataffär"');
-	assertEqual(r.cleanText, 'mjölk', 'target note: cleanText does not contain header text');
+	assertEqual(r.header, 'Non food items', 'target note: extracted @"Non food items"');
+	assertEqual(r.cleanText, 'Milk', 'target note: cleanText does not contain header text');
 }
 
 // Test 1.6: Dynamic note headers (unquoted header with spaces matched against note headers)
 {
-	const groceriesHeaders = ['Ej mataffär', 'Frukt & Grönt', 'Mejeri', ...templateHeaders];
-	const r = parseTaskInput('/Groceries @Ej mataffär köpa smör', groceriesHeaders);
+	const groceriesHeaders = ['Non food items', 'Fruits & Vegetables', 'Dairy', ...templateHeaders];
+	const r = parseTaskInput('/Groceries @Non food items Buy butter', groceriesHeaders);
 	assertEqual(r.targetNote, 'Groceries', 'target note: extracted /Groceries');
-	assertEqual(r.header, 'Ej mataffär', 'target note: matched unquoted @Ej mataffär from note headers');
-	assertEqual(r.cleanText, 'köpa smör', 'target note: cleanText is solely the task text');
+	assertEqual(r.header, 'Non food items', 'target note: matched unquoted @Non food items from note headers');
+	assertEqual(r.cleanText, 'Buy butter', 'target note: cleanText is solely the task text');
+}
+
+// Test 1.7: Target note recency sorting & alphabetical fallback
+{
+	const recents = ['Groceries', 'NonExistentNote', 'Projects'];
+	const files = [
+		{ basename: 'Work', path: 'Work.md' },
+		{ basename: 'Groceries', path: 'Groceries.md' },
+		{ basename: 'Archive', path: 'Archive.md' },
+		{ basename: 'Projects', path: 'Projects.md' },
+		{ basename: 'Books', path: 'Books.md' },
+	];
+
+	const fileMap = new Map<string, any>();
+	for (const f of files) {
+		fileMap.set(f.basename.toLowerCase(), f);
+	}
+
+	const recentSuggestions: any[] = [];
+	const seen = new Set<string>();
+
+	for (const recentName of recents) {
+		const lower = recentName.toLowerCase();
+		const file = fileMap.get(lower);
+		if (file && !seen.has(lower)) {
+			seen.add(lower);
+			recentSuggestions.push({ name: file.basename, path: file.path, isRecent: true });
+		}
+	}
+
+	const otherSuggestions: any[] = [];
+	for (const f of files) {
+		const lower = f.basename.toLowerCase();
+		if (!seen.has(lower)) {
+			seen.add(lower);
+			otherSuggestions.push({ name: f.basename, path: f.path, isRecent: false });
+		}
+	}
+	otherSuggestions.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+	const result = [...recentSuggestions, ...otherSuggestions];
+
+	// Verify order:
+	assertEqual(result[0].name, 'Groceries', 'note sort: 1st is most recent (Groceries)');
+	assertEqual(result[0].isRecent, true, 'note sort: 1st is marked isRecent');
+	assertEqual(result[1].name, 'Projects', 'note sort: 2nd is 2nd recent (Projects)');
+	assertEqual(result[1].isRecent, true, 'note sort: 2nd is marked isRecent');
+	assert(!result.some((r) => r.name === 'NonExistentNote'), 'note sort: pruned deleted note from recents');
+	assertEqual(result[2].name, 'Archive', 'note sort: remaining notes sorted A-Z (Archive)');
+	assertEqual(result[2].isRecent, false, 'note sort: remaining notes isRecent is false');
+	assertEqual(result[3].name, 'Books', 'note sort: remaining notes sorted A-Z (Books)');
+	assertEqual(result[4].name, 'Work', 'note sort: remaining notes sorted A-Z (Work)');
 }
 
 // ----------------------------------------------------
@@ -140,15 +192,15 @@ console.log('\n--- 2. NLP Parser & Bug Fix Tests ---');
 	assertEqual(r.cleanText, 'Buy milk', 'tod: cleanText has date and @header stripped');
 }
 
-// Test 2.5: Swedish 'idag' (today) & 'imorgon' (tomorrow)
+// Test 2.5: 'today' and 'tomorrow' natural words
 {
-	const r = parseTaskInput('Kolla lägenheter idag @2 minute stuff', templateHeaders);
-	assertEqual(r.date?.format('YYYY-MM-DD'), moment().format('YYYY-MM-DD'), 'idag: resolves to today');
-	assertEqual(r.header, '2 minute stuff', 'idag: matches 2 minute stuff');
+	const r = parseTaskInput('Inspect apartments today @2 minute stuff', templateHeaders);
+	assertEqual(r.date?.format('YYYY-MM-DD'), moment().format('YYYY-MM-DD'), 'today: resolves to today');
+	assertEqual(r.header, '2 minute stuff', 'today: matches 2 minute stuff');
 
-	const r2 = parseTaskInput('Städa rummet imorgon @Written plan', templateHeaders);
-	assertEqual(r2.date?.format('YYYY-MM-DD'), moment().add(1, 'day').format('YYYY-MM-DD'), 'imorgon: resolves to tomorrow');
-	assertEqual(r2.cleanText, 'Städa rummet', 'imorgon: clean text');
+	const r2 = parseTaskInput('Clean room tomorrow @Written plan', templateHeaders);
+	assertEqual(r2.date?.format('YYYY-MM-DD'), moment().add(1, 'day').format('YYYY-MM-DD'), 'tomorrow: resolves to tomorrow');
+	assertEqual(r2.cleanText, 'Clean room', 'tomorrow: clean text');
 }
 
 // Test 2.6: Date mention inside topic name vs action date
@@ -167,10 +219,10 @@ console.log('\n--- 2. NLP Parser & Bug Fix Tests ---');
 
 // Test 2.8: Native #tags preserved
 {
-	const r = parseTaskInput('*In och kolla ungdomslägenheter* #mobile tod @2 minute stuff', templateHeaders);
+	const r = parseTaskInput('*Check rental housing listings* #mobile tod @2 minute stuff', templateHeaders);
 	assertEqual(r.header, '2 minute stuff', 'tags: matches multi-word section');
 	assert(r.cleanText.includes('#mobile'), 'tags: preserves #mobile in cleanText');
-	assertEqual(r.cleanText, '*In och kolla ungdomslägenheter* #mobile', 'tags: exact cleanText');
+	assertEqual(r.cleanText, '*Check rental housing listings* #mobile', 'tags: exact cleanText');
 }
 
 // ----------------------------------------------------
@@ -228,11 +280,11 @@ console.log('\n--- 3. NLP Recurrence ("every X Y") Tests ---');
 
 // Test 3.6: Cursive formatting
 {
-	assertEqual(formatCursiveTask('Dagbok!'), '*Dagbok!*', 'cursive: wraps normal text');
+	assertEqual(formatCursiveTask('Daily journal'), '*Daily journal*', 'cursive: wraps normal text');
 	assertEqual(formatCursiveTask('*Already italic*'), '*Already italic*', 'cursive: keeps existing italics');
 	assertEqual(
-		formatCursiveTask('In och kolla ungdomslägenheter #mobile'),
-		'*In och kolla ungdomslägenheter* #mobile',
+		formatCursiveTask('Check rental housing listings #mobile'),
+		'*Check rental housing listings* #mobile',
 		'cursive: places trailing tags outside asterisks'
 	);
 }
@@ -269,7 +321,7 @@ const manager = new DailyNoteManager(mockApp);
 
 // Test 5.1: Sub-heading boundary (H3 with H4 subheadings)
 {
-	const note = `### Todos\n- [ ] Existing direct todo\n\n#### Written plan\n- [ ] Plan item 1\n\n##### 2 minute stuff\n- [ ] Dagbok!\n`;
+	const note = `### Todos\n- [ ] Existing direct todo\n\n#### Written plan\n- [ ] Plan item 1\n\n##### 2 minute stuff\n- [ ] Daily journal\n`;
 	const res = manager.insertTaskUnderHeader(note, 'Todos', 'New direct todo');
 	const lines = res.content.split('\n');
 	const newIdx = lines.findIndex((l) => l.includes('New direct todo'));
@@ -299,6 +351,33 @@ const manager = new DailyNoteManager(mockApp);
 	const res = manager.insertTaskUnderHeader(note, 'Todos', 'Buy apples');
 	assert(res.content.includes('## Todos'), 'custom note: created ## Todos header');
 	assert(res.content.includes('- [ ] Buy apples'), 'custom note: appended Buy apples');
+}
+
+// Test 5.4: Custom newHeaderLevel (e.g. 3 -> ###, 4 -> ####)
+{
+	const note = `# My Project\nSome notes\n`;
+	const resH3 = manager.insertTaskUnderHeader(note, 'Next Actions', 'Call Alice', 3);
+	assert(resH3.content.includes('### Next Actions'), 'custom header level: created ### Next Actions for level 3');
+	assert(resH3.content.includes('- [ ] Call Alice'), 'custom header level: inserted task under ###');
+
+	const resH4 = manager.insertTaskUnderHeader(note, 'Deep Work', 'Write specs', 4);
+	assert(resH4.content.includes('#### Deep Work'), 'custom header level: created #### Deep Work for level 4');
+}
+
+// Test 5.5: addCodeBlock = true inserts code block button beneath new header
+{
+	const note = `# My Project\n`;
+	const res = manager.insertTaskUnderHeader(note, 'Action items', 'First task', 2, true);
+	assert(
+		res.content.includes('## Action items\n```task-add\n```\n- [ ] First task'),
+		'code block button: added task-add block under new header and above task'
+	);
+	const lines = res.content.split('\n');
+	assertEqual(
+		lines[res.insertedLine],
+		'- [ ] First task',
+		'code block button: insertedLine points accurately to task bullet'
+	);
 }
 
 // ----------------------------------------------------
@@ -636,6 +715,14 @@ console.log('\n--- 9. Declarative Settings Search API Definitions Tests ---');
 	// Toggle openNoteInNewTab to true
 	mockPlugin.settings.openNoteInNewTab = true;
 	assertEqual(swapTabDef?.visible(), true, 'settings search: swap to new tab visible when openNoteInNewTab is true');
+
+	const headerLevelDef = allItems.find((d: any) => d.control?.key === 'newHeaderLevel');
+	assert(headerLevelDef !== undefined, 'settings search: includes newHeaderLevel definition');
+	assertEqual(headerLevelDef?.name, 'New section heading level', 'settings search: newHeaderLevel name matches');
+
+	const addCodeBlockDef = allItems.find((d: any) => d.control?.key === 'addCodeBlockUnderNewHeaders');
+	assert(addCodeBlockDef !== undefined, 'settings search: includes addCodeBlockUnderNewHeaders definition');
+	assertEqual(addCodeBlockDef?.name, 'Add "+ add task" button under new sections', 'settings search: addCodeBlockUnderNewHeaders name matches');
 }
 
 console.log(`\n=== ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===\n`);

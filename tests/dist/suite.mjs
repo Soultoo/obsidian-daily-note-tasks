@@ -7232,35 +7232,21 @@ var casual2 = casual;
 var DAY_MAP = {
   sun: 0,
   sunday: 0,
-  s\u00F6ndag: 0,
-  s\u00F6n: 0,
   mon: 1,
   monday: 1,
-  m\u00E5ndag: 1,
-  m\u00E5n: 1,
   tue: 2,
   tuesday: 2,
-  tisdag: 2,
-  tis: 2,
   wed: 3,
   wednesday: 3,
-  onsdag: 3,
-  ons: 3,
   thu: 4,
   thursday: 4,
-  torsdag: 4,
-  tor: 4,
   fri: 5,
   friday: 5,
-  fredag: 5,
-  fre: 5,
   sat: 6,
-  saturday: 6,
-  l\u00F6rdag: 6,
-  l\u00F6r: 6
+  saturday: 6
 };
 function parseRecurrenceFromText(input, baseDateMoment = (0, import_moment.default)()) {
-  const regex = /(?:^|\s)(every|varje)\s+(\d+)?\s*(day|days|dag|dagar|week|weeks|vecka|veckor|month|months|månad|månader|year|years|år|weekday|weekdays|vardag|vardagar|mon|tue|wed|thu|fri|sat|sun|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)(?:\s+(?:on|på)\s+(?:the\s+|den\s+)?(\d{1,2}(?:st|nd|rd|th|:e|:a)?|(?:(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mån|tis|ons|tor|fre|lör|sön|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)(?:[,\s]+(?:and|och)?[,\s]*)*)))?(?=$|\s|@)/i;
+  const regex = /(?:^|\s)(every)\s+(\d+)?\s*(day|days|week|weeks|month|months|year|years|weekday|weekdays|mon|tue|wed|thu|fri|sat|sun)(?:\s+on\s+(?:the\s+)?(\d{1,2}(?:st|nd|rd|th)?|(?:(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:[,\s]+and?[,\s]*)*)))?(?=$|\s|@)/i;
   const match = input.match(regex);
   if (!match || match.index === void 0) {
     return { rule: null, span: null };
@@ -7276,19 +7262,19 @@ function parseRecurrenceFromText(input, baseDateMoment = (0, import_moment.defau
   let unit = "day";
   let daysOfWeek = void 0;
   let dayOfMonth = void 0;
-  if (unitStr === "day" || unitStr === "days" || unitStr === "dag" || unitStr === "dagar") {
+  if (unitStr === "day" || unitStr === "days") {
     unit = "day";
-  } else if (unitStr === "weekday" || unitStr === "weekdays" || unitStr === "vardag" || unitStr === "vardagar") {
+  } else if (unitStr === "weekday" || unitStr === "weekdays") {
     unit = "week";
     daysOfWeek = [1, 2, 3, 4, 5];
-  } else if (unitStr === "week" || unitStr === "weeks" || unitStr === "vecka" || unitStr === "veckor") {
+  } else if (unitStr === "week" || unitStr === "weeks") {
     unit = "week";
     if (onClause) {
       daysOfWeek = parseDaysOfWeek(onClause);
     } else {
       daysOfWeek = [baseDateMoment.day()];
     }
-  } else if (unitStr === "month" || unitStr === "months" || unitStr === "m\xE5nad" || unitStr === "m\xE5nader") {
+  } else if (unitStr === "month" || unitStr === "months") {
     unit = "month";
     if (onClause) {
       const dayNum = parseInt(onClause.replace(/\D/g, ""), 10);
@@ -7300,7 +7286,7 @@ function parseRecurrenceFromText(input, baseDateMoment = (0, import_moment.defau
     } else {
       dayOfMonth = baseDateMoment.date();
     }
-  } else if (unitStr === "year" || unitStr === "years" || unitStr === "\xE5r") {
+  } else if (unitStr === "year" || unitStr === "years") {
     unit = "year";
   } else if (DAY_MAP[unitStr] !== void 0) {
     unit = "week";
@@ -7364,13 +7350,13 @@ function getOrdinalSuffix(n) {
 function createCustomChrono() {
   const custom = casual2.clone();
   custom.parsers.unshift({
-    pattern: () => /(?:^|\b)(tod|tom|idag|imorgon|imorn)(?=\W|$)/i,
+    pattern: () => /(?:^|\b)(tod|tom)(?=\W|$)/i,
     extract: (context, match) => {
       const text = match[1]?.toLowerCase();
       const comp = context.createParsingComponents();
       const refDate = context.refDate;
       const target = new Date(refDate.getTime());
-      if (text === "tom" || text === "imorgon" || text === "imorn") {
+      if (text === "tom") {
         target.setDate(target.getDate() + 1);
       }
       comp.assign("year", target.getFullYear());
@@ -7465,7 +7451,7 @@ function parseTaskInput(input, availableHeaders = [], defaultHeader = "Written p
     let selectedResult = chronoResults[0];
     for (const res of chronoResults) {
       const lower = res.text.toLowerCase();
-      if (lower.includes("tod") || lower.includes("tom") || lower.includes("idag") || lower.includes("imorgon") || lower.includes("imorn") || lower.includes("today") || lower.includes("tomorrow")) {
+      if (lower.includes("tod") || lower.includes("tom") || lower.includes("today") || lower.includes("tomorrow")) {
         selectedResult = res;
         break;
       }
@@ -7746,8 +7732,9 @@ function getAllDailyNotes() {
 
 // src/daily-note-manager.ts
 var DailyNoteManager = class {
-  constructor(app) {
+  constructor(app, getSettings) {
     this.app = app;
+    this.getSettings = getSettings;
   }
   /**
    * Ensures a daily note exists for the given date (creating it from template if necessary),
@@ -7775,9 +7762,18 @@ var DailyNoteManager = class {
     if (!dailyFile) {
       throw new Error(`Could not find or create daily note for ${targetDate.format("YYYY-MM-DD")}`);
     }
+    const settings = this.getSettings?.();
+    const newHeaderLevel = settings?.newHeaderLevel ?? 2;
+    const addCodeBlock = settings?.addCodeBlockUnderNewHeaders ?? false;
     let insertedLine = -1;
     await this.app.vault.process(dailyFile, (data) => {
-      const result = this.insertTaskUnderHeader(data, headerName, taskContent);
+      const result = this.insertTaskUnderHeader(
+        data,
+        headerName,
+        taskContent,
+        newHeaderLevel,
+        addCodeBlock
+      );
       insertedLine = result.insertedLine;
       return result.content;
     });
@@ -7804,10 +7800,19 @@ var DailyNoteManager = class {
         throw err;
       }
     }
+    const settings = this.getSettings?.();
+    const newHeaderLevel = settings?.newHeaderLevel ?? 2;
+    const addCodeBlock = settings?.addCodeBlockUnderNewHeaders ?? false;
+    const effectiveHeader = headerName || settings?.defaultCustomNoteHeader || "Todos";
     let insertedLine = -1;
-    const effectiveHeader = headerName || "Todos";
     await this.app.vault.process(targetFile, (data) => {
-      const result = this.insertTaskUnderHeader(data, effectiveHeader, taskContent);
+      const result = this.insertTaskUnderHeader(
+        data,
+        effectiveHeader,
+        taskContent,
+        newHeaderLevel,
+        addCodeBlock
+      );
       insertedLine = result.insertedLine;
       return result.content;
     });
@@ -7903,7 +7908,7 @@ var DailyNoteManager = class {
   /**
    * Inserts a task item under a specific header.
    */
-  insertTaskUnderHeader(content, headerName, taskContent) {
+  insertTaskUnderHeader(content, headerName, taskContent, newHeaderLevel = 2, addCodeBlock = false) {
     const formattedTask = taskContent.startsWith("- [ ]") ? taskContent : `- [ ] ${taskContent}`;
     const lines = content.split("\n");
     const cleanTargetHeader = headerName.toLowerCase().replace(/[*_`#[\]@]/g, "").trim();
@@ -7938,13 +7943,15 @@ var DailyNoteManager = class {
     }
     if (headerLineIndex === -1) {
       const trimmedContent = content.trimEnd();
+      const hashes = "#".repeat(Math.max(1, Math.min(6, newHeaderLevel)));
+      const codeBlockPart = addCodeBlock ? "```task-add\n```\n" : "";
       const newSection = `
 
-## ${headerName}
-${formattedTask}
+${hashes} ${headerName}
+${codeBlockPart}${formattedTask}
 `;
-      const newContent = trimmedContent ? `${trimmedContent}${newSection}` : `## ${headerName}
-${formattedTask}
+      const newContent = trimmedContent ? `${trimmedContent}${newSection}` : `${hashes} ${headerName}
+${codeBlockPart}${formattedTask}
 `;
       return {
         content: newContent,
@@ -8152,7 +8159,7 @@ var RecurringTasksModal = class extends Modal {
     let targetHeader = this.defaultHeader;
     let recurrencePattern = "every day";
     new Setting(formContainer).setName("Task description").addText(
-      (text) => text.setPlaceholder("E.g. Water plants, dagbok!").onChange((val) => taskName = val.trim())
+      (text) => text.setPlaceholder("E.g. Water plants, daily journal").onChange((val) => taskName = val.trim())
     );
     const headerNames = this.templateParser.getHeaderNames();
     new Setting(formContainer).setName("Target header").addDropdown((dropdown) => {
@@ -8255,6 +8262,18 @@ var DailyNoteTasksSettingTab = class extends PluginSettingTab {
     new Setting(containerEl).setName("Default custom note header").setDesc('Header used when targeting a custom note (/note) without a specified @section (e.g. "todos" creates "## todos").').addText((text) => {
       text.setPlaceholder("Todos").setValue(this.plugin.settings.defaultCustomNoteHeader || "Todos").onChange(async (value) => {
         this.plugin.settings.defaultCustomNoteHeader = value.trim() || "Todos";
+        await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName("New section heading level").setDesc("Heading level (h1 to h6) used when creating a new section in a note.").addDropdown((dropdown) => {
+      dropdown.addOption("1", "H1 (#)").addOption("2", "H2 (##)").addOption("3", "H3 (###)").addOption("4", "H4 (####)").addOption("5", "H5 (#####)").addOption("6", "H6 (######)").setValue(String(this.plugin.settings.newHeaderLevel ?? 2)).onChange(async (value) => {
+        this.plugin.settings.newHeaderLevel = parseInt(value, 10);
+        await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName('Add "+ add task" button under new sections').setDesc('Automatically insert an inline "+ add task" code block button beneath newly created section headers.').addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.addCodeBlockUnderNewHeaders === true).onChange(async (value) => {
+        this.plugin.settings.addCodeBlockUnderNewHeaders = value;
         await this.plugin.saveSettings();
       });
     });
@@ -8399,6 +8418,30 @@ var DailyNoteTasksSettingTab = class extends PluginSettingTab {
               key: "defaultCustomNoteHeader",
               placeholder: "Todos"
             }
+          },
+          {
+            name: "New section heading level",
+            desc: "Heading level (h1 to h6) used when creating a new section in a note.",
+            control: {
+              type: "dropdown",
+              key: "newHeaderLevel",
+              options: {
+                "1": "H1 (#)",
+                "2": "H2 (##)",
+                "3": "H3 (###)",
+                "4": "H4 (####)",
+                "5": "H5 (#####)",
+                "6": "H6 (######)"
+              }
+            }
+          },
+          {
+            name: 'Add "+ add task" button under new sections',
+            desc: 'Automatically insert an inline "+ add task" code block button beneath newly created section headers.',
+            control: {
+              type: "toggle",
+              key: "addCodeBlockUnderNewHeaders"
+            }
           }
         ]
       },
@@ -8492,6 +8535,8 @@ var DailyNoteTasksSettingTab = class extends PluginSettingTab {
 var DEFAULT_SETTINGS = {
   defaultHeader: "Written plan",
   defaultCustomNoteHeader: "Todos",
+  newHeaderLevel: 2,
+  addCodeBlockUnderNewHeaders: false,
   dateFormat: "YYYY-MM-DD",
   timeFormat: "HH:mm",
   timePosition: "natural",
@@ -8562,17 +8607,60 @@ console.log('--- 1. Target Note ("/note") Tests ---');
   assertEqual(r.cleanText, "Fix critical bug", "target note: cleanText is clean");
 }
 {
-  const r = parseTaskInput('mj\xF6lk /Groceries @"Ej mataff\xE4r"', templateHeaders);
+  const r = parseTaskInput('Milk /Groceries @"Non food items"', templateHeaders);
   assertEqual(r.targetNote, "Groceries", "target note: extracted /Groceries");
-  assertEqual(r.header, "Ej mataff\xE4r", 'target note: extracted @"Ej mataff\xE4r"');
-  assertEqual(r.cleanText, "mj\xF6lk", "target note: cleanText does not contain header text");
+  assertEqual(r.header, "Non food items", 'target note: extracted @"Non food items"');
+  assertEqual(r.cleanText, "Milk", "target note: cleanText does not contain header text");
 }
 {
-  const groceriesHeaders = ["Ej mataff\xE4r", "Frukt & Gr\xF6nt", "Mejeri", ...templateHeaders];
-  const r = parseTaskInput("/Groceries @Ej mataff\xE4r k\xF6pa sm\xF6r", groceriesHeaders);
+  const groceriesHeaders = ["Non food items", "Fruits & Vegetables", "Dairy", ...templateHeaders];
+  const r = parseTaskInput("/Groceries @Non food items Buy butter", groceriesHeaders);
   assertEqual(r.targetNote, "Groceries", "target note: extracted /Groceries");
-  assertEqual(r.header, "Ej mataff\xE4r", "target note: matched unquoted @Ej mataff\xE4r from note headers");
-  assertEqual(r.cleanText, "k\xF6pa sm\xF6r", "target note: cleanText is solely the task text");
+  assertEqual(r.header, "Non food items", "target note: matched unquoted @Non food items from note headers");
+  assertEqual(r.cleanText, "Buy butter", "target note: cleanText is solely the task text");
+}
+{
+  const recents = ["Groceries", "NonExistentNote", "Projects"];
+  const files = [
+    { basename: "Work", path: "Work.md" },
+    { basename: "Groceries", path: "Groceries.md" },
+    { basename: "Archive", path: "Archive.md" },
+    { basename: "Projects", path: "Projects.md" },
+    { basename: "Books", path: "Books.md" }
+  ];
+  const fileMap = /* @__PURE__ */ new Map();
+  for (const f of files) {
+    fileMap.set(f.basename.toLowerCase(), f);
+  }
+  const recentSuggestions = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const recentName of recents) {
+    const lower = recentName.toLowerCase();
+    const file = fileMap.get(lower);
+    if (file && !seen.has(lower)) {
+      seen.add(lower);
+      recentSuggestions.push({ name: file.basename, path: file.path, isRecent: true });
+    }
+  }
+  const otherSuggestions = [];
+  for (const f of files) {
+    const lower = f.basename.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      otherSuggestions.push({ name: f.basename, path: f.path, isRecent: false });
+    }
+  }
+  otherSuggestions.sort((a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" }));
+  const result = [...recentSuggestions, ...otherSuggestions];
+  assertEqual(result[0].name, "Groceries", "note sort: 1st is most recent (Groceries)");
+  assertEqual(result[0].isRecent, true, "note sort: 1st is marked isRecent");
+  assertEqual(result[1].name, "Projects", "note sort: 2nd is 2nd recent (Projects)");
+  assertEqual(result[1].isRecent, true, "note sort: 2nd is marked isRecent");
+  assert(!result.some((r) => r.name === "NonExistentNote"), "note sort: pruned deleted note from recents");
+  assertEqual(result[2].name, "Archive", "note sort: remaining notes sorted A-Z (Archive)");
+  assertEqual(result[2].isRecent, false, "note sort: remaining notes isRecent is false");
+  assertEqual(result[3].name, "Books", "note sort: remaining notes sorted A-Z (Books)");
+  assertEqual(result[4].name, "Work", "note sort: remaining notes sorted A-Z (Work)");
 }
 console.log("\n--- 2. NLP Parser & Bug Fix Tests ---");
 {
@@ -8604,12 +8692,12 @@ console.log("\n--- 2. NLP Parser & Bug Fix Tests ---");
   assertEqual(r.cleanText, "Buy milk", "tod: cleanText has date and @header stripped");
 }
 {
-  const r = parseTaskInput("Kolla l\xE4genheter idag @2 minute stuff", templateHeaders);
-  assertEqual(r.date?.format("YYYY-MM-DD"), (0, import_moment.default)().format("YYYY-MM-DD"), "idag: resolves to today");
-  assertEqual(r.header, "2 minute stuff", "idag: matches 2 minute stuff");
-  const r2 = parseTaskInput("St\xE4da rummet imorgon @Written plan", templateHeaders);
-  assertEqual(r2.date?.format("YYYY-MM-DD"), (0, import_moment.default)().add(1, "day").format("YYYY-MM-DD"), "imorgon: resolves to tomorrow");
-  assertEqual(r2.cleanText, "St\xE4da rummet", "imorgon: clean text");
+  const r = parseTaskInput("Inspect apartments today @2 minute stuff", templateHeaders);
+  assertEqual(r.date?.format("YYYY-MM-DD"), (0, import_moment.default)().format("YYYY-MM-DD"), "today: resolves to today");
+  assertEqual(r.header, "2 minute stuff", "today: matches 2 minute stuff");
+  const r2 = parseTaskInput("Clean room tomorrow @Written plan", templateHeaders);
+  assertEqual(r2.date?.format("YYYY-MM-DD"), (0, import_moment.default)().add(1, "day").format("YYYY-MM-DD"), "tomorrow: resolves to tomorrow");
+  assertEqual(r2.cleanText, "Clean room", "tomorrow: clean text");
 }
 {
   const r = parseTaskInput("Discuss Nov 15 release tod @Todos", templateHeaders);
@@ -8622,10 +8710,10 @@ console.log("\n--- 2. NLP Parser & Bug Fix Tests ---");
   assertEqual(r.cleanText, "Important meeting urgent stuff", "punct: clean text");
 }
 {
-  const r = parseTaskInput("*In och kolla ungdomsl\xE4genheter* #mobile tod @2 minute stuff", templateHeaders);
+  const r = parseTaskInput("*Check rental housing listings* #mobile tod @2 minute stuff", templateHeaders);
   assertEqual(r.header, "2 minute stuff", "tags: matches multi-word section");
   assert(r.cleanText.includes("#mobile"), "tags: preserves #mobile in cleanText");
-  assertEqual(r.cleanText, "*In och kolla ungdomsl\xE4genheter* #mobile", "tags: exact cleanText");
+  assertEqual(r.cleanText, "*Check rental housing listings* #mobile", "tags: exact cleanText");
 }
 console.log('\n--- 3. NLP Recurrence ("every X Y") Tests ---');
 {
@@ -8667,11 +8755,11 @@ console.log('\n--- 3. NLP Recurrence ("every X Y") Tests ---');
   assertEqual(r.cleanText, "Sprint review", "recurrence: cleanText is clean");
 }
 {
-  assertEqual(formatCursiveTask("Dagbok!"), "*Dagbok!*", "cursive: wraps normal text");
+  assertEqual(formatCursiveTask("Daily journal"), "*Daily journal*", "cursive: wraps normal text");
   assertEqual(formatCursiveTask("*Already italic*"), "*Already italic*", "cursive: keeps existing italics");
   assertEqual(
-    formatCursiveTask("In och kolla ungdomsl\xE4genheter #mobile"),
-    "*In och kolla ungdomsl\xE4genheter* #mobile",
+    formatCursiveTask("Check rental housing listings #mobile"),
+    "*Check rental housing listings* #mobile",
     "cursive: places trailing tags outside asterisks"
   );
 }
@@ -8701,7 +8789,7 @@ var manager = new DailyNoteManager(mockApp);
 - [ ] Plan item 1
 
 ##### 2 minute stuff
-- [ ] Dagbok!
+- [ ] Daily journal
 `;
   const res = manager.insertTaskUnderHeader(note, "Todos", "New direct todo");
   const lines = res.content.split("\n");
@@ -8733,6 +8821,31 @@ Some intro text
   const res = manager.insertTaskUnderHeader(note, "Todos", "Buy apples");
   assert(res.content.includes("## Todos"), "custom note: created ## Todos header");
   assert(res.content.includes("- [ ] Buy apples"), "custom note: appended Buy apples");
+}
+{
+  const note = `# My Project
+Some notes
+`;
+  const resH3 = manager.insertTaskUnderHeader(note, "Next Actions", "Call Alice", 3);
+  assert(resH3.content.includes("### Next Actions"), "custom header level: created ### Next Actions for level 3");
+  assert(resH3.content.includes("- [ ] Call Alice"), "custom header level: inserted task under ###");
+  const resH4 = manager.insertTaskUnderHeader(note, "Deep Work", "Write specs", 4);
+  assert(resH4.content.includes("#### Deep Work"), "custom header level: created #### Deep Work for level 4");
+}
+{
+  const note = `# My Project
+`;
+  const res = manager.insertTaskUnderHeader(note, "Action items", "First task", 2, true);
+  assert(
+    res.content.includes("## Action items\n```task-add\n```\n- [ ] First task"),
+    "code block button: added task-add block under new header and above task"
+  );
+  const lines = res.content.split("\n");
+  assertEqual(
+    lines[res.insertedLine],
+    "- [ ] First task",
+    "code block button: insertedLine points accurately to task bullet"
+  );
 }
 console.log("\n--- 6. Task AST Caret & Blank Line Tests ---");
 function createMockEditor(lines) {
@@ -9024,6 +9137,12 @@ console.log("\n--- 9. Declarative Settings Search API Definitions Tests ---");
   assertEqual(swapTabDef?.visible(), false, "settings search: swap to new tab hidden when openNoteInNewTab is false");
   mockPlugin.settings.openNoteInNewTab = true;
   assertEqual(swapTabDef?.visible(), true, "settings search: swap to new tab visible when openNoteInNewTab is true");
+  const headerLevelDef = allItems.find((d) => d.control?.key === "newHeaderLevel");
+  assert(headerLevelDef !== void 0, "settings search: includes newHeaderLevel definition");
+  assertEqual(headerLevelDef?.name, "New section heading level", "settings search: newHeaderLevel name matches");
+  const addCodeBlockDef = allItems.find((d) => d.control?.key === "addCodeBlockUnderNewHeaders");
+  assert(addCodeBlockDef !== void 0, "settings search: includes addCodeBlockUnderNewHeaders definition");
+  assertEqual(addCodeBlockDef?.name, 'Add "+ add task" button under new sections', "settings search: addCodeBlockUnderNewHeaders name matches");
 }
 console.log(`
 === ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===

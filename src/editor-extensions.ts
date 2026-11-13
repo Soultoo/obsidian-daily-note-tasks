@@ -13,17 +13,20 @@ import {
 	RangeSetBuilder,
 } from '@codemirror/state';
 import {
+	Completion,
 	CompletionContext,
 	CompletionResult,
 	autocompletion,
 	startCompletion,
 } from '@codemirror/autocomplete';
 import { parseTaskInput } from './parser';
-import { ParsedTask, TemplateHeader } from './types';
+import { ParsedTask, TemplateHeader, VaultNoteSuggestion } from './types';
 
 export interface EditorExtensionOptions {
 	getHeaders: (targetNoteName?: string | null) => TemplateHeader[];
-	getVaultNotes?: () => string[];
+	getVaultNotes?: () => VaultNoteSuggestion[] | string[];
+	isHeaderExisting?: (headerName: string, targetNoteName?: string | null) => boolean;
+	newHeaderLevel?: number;
 	defaultHeader: string;
 	defaultCustomNoteHeader?: string;
 	timeFormat?: string;
@@ -42,6 +45,8 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 	const {
 		getHeaders,
 		getVaultNotes = () => [],
+		isHeaderExisting,
+		newHeaderLevel = 2,
 		defaultHeader,
 		defaultCustomNoteHeader = 'Todos',
 		timeFormat = 'HH:mm',
@@ -135,20 +140,32 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 					});
 				}
 
-				// Red header highlight
+				// Red header highlight (or highlighted as new if not existing)
 				if (
 					parsed.headerSpan &&
 					parsed.headerSpan.from >= 0 &&
 					parsed.headerSpan.to <= docText.length &&
 					parsed.headerSpan.from < parsed.headerSpan.to
 				) {
+					const headerName = parsed.header || '';
+					const isExisting = isHeaderExisting
+						? isHeaderExisting(headerName, parsed.targetNote)
+						: true;
+					const hashes = '#'.repeat(Math.max(1, Math.min(6, newHeaderLevel)));
+					const cls = isExisting
+						? 'dnt-nlp-header'
+						: 'dnt-nlp-header dnt-nlp-header-new';
+					const title = isExisting
+						? `Section: @${headerName}`
+						: `Section: @${headerName} ✨ (will create ${hashes} ${headerName})`;
+
 					marks.push({
 						from: parsed.headerSpan.from,
 						to: parsed.headerSpan.to,
 						deco: Decoration.mark({
-							class: 'dnt-nlp-header',
+							class: cls,
 							attributes: {
-								title: `Section: ${parsed.header || ''}`,
+								title,
 							},
 						}),
 					});
@@ -198,17 +215,25 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 				// Target note autocomplete on '/'
 				const noteWord = context.matchBefore(/\/[^\n@#]*$/);
 				if (noteWord) {
-					const notes = getVaultNotes();
+					const rawNotes = getVaultNotes();
+					const noteSuggestions: VaultNoteSuggestion[] = rawNotes.map((n) =>
+						typeof n === 'string' ? { name: n, path: n, isRecent: false } : n
+					);
+
 					return {
 						from: noteWord.from,
-						options: notes.map((name) => {
-							const hasSpacesOrSpecial = name.includes(' ') || /[^\w\-/.]/.test(name);
-							const applyText = hasSpacesOrSpecial ? `/"${name}" ` : `/${name} `;
+						options: noteSuggestions.map((note, index) => {
+							const hasSpacesOrSpecial =
+								note.name.includes(' ') || /[^\w\-/.]/.test(note.name);
+							const applyText = hasSpacesOrSpecial ? `/"${note.name}" ` : `/${note.name} `;
+							const detailText = note.isRecent ? '🕒 Recent • Note' : 'Note';
+							const boost = note.isRecent ? 100 - index : 0;
 							return {
-								label: `/${name}`,
-								detail: 'Note',
+								label: `/${note.name}`,
+								detail: detailText,
 								apply: applyText,
 								type: 'variable',
+								boost,
 							};
 						}),
 					};
@@ -220,21 +245,40 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 					const docText = context.state.doc.toString();
 					const noteName = extractNoteNameFromDoc(docText);
 					const headers = getHeaders(noteName);
+					const typed = headerWord.text.slice(1).trim().replace(/^["']|["']$/g, '');
+
+					const options: Completion[] = headers.map((h, index) => {
+						const detailText = h.isRecent
+							? `🕒 Recent • H${h.level}`
+							: `H${h.level}`;
+						const needsQuotes = h.heading.includes(' ') || /[^\w\-/]/.test(h.heading);
+						const applyText = needsQuotes ? `@"${h.heading}" ` : `@${h.heading} `;
+						const boost = h.isRecent ? 100 - index : 0;
+						return {
+							label: `@${h.heading}`,
+							detail: detailText,
+							apply: applyText,
+							type: 'keyword',
+							boost,
+						};
+					});
+
+					if (typed && !headers.some((h) => h.heading.toLowerCase() === typed.toLowerCase())) {
+						const hashes = '#'.repeat(Math.max(1, Math.min(6, newHeaderLevel)));
+						const needsQuotes = typed.includes(' ') || /[^\w\-/]/.test(typed);
+						const applyText = needsQuotes ? `@"${typed}" ` : `@${typed} `;
+						options.push({
+							label: `@${typed}`,
+							detail: `✨ Will create ${hashes} ${typed}`,
+							apply: applyText,
+							type: 'text',
+							boost: -1,
+						});
+					}
+
 					return {
 						from: headerWord.from,
-						options: headers.map((h) => {
-							const detailText = h.isRecent
-								? `🕒 Recent • H${h.level}`
-								: `H${h.level}`;
-							const needsQuotes = h.heading.includes(' ') || /[^\w\-/]/.test(h.heading);
-							const applyText = needsQuotes ? `@"${h.heading}" ` : `@${h.heading} `;
-							return {
-								label: `@${h.heading}`,
-								detail: detailText,
-								apply: applyText,
-								type: 'keyword',
-							};
-						}),
+						options,
 					};
 				}
 

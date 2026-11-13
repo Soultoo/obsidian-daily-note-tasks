@@ -1,4 +1,5 @@
-import { App, Modal, Notice, moment } from 'obsidian';
+import { App, Modal, Notice, TFile, moment } from 'obsidian';
+import { getAllDailyNotes, getDailyNote } from 'obsidian-daily-notes-interface';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { createCaptureEditorExtensions, insertSymbolAtCursor } from './editor-extensions';
@@ -7,7 +8,7 @@ import { DailyNoteManager } from './daily-note-manager';
 import { TemplateParser } from './template-parser';
 import { RecurringManager, formatCursiveTask } from './recurring-manager';
 import { formatRecurrenceLabel } from './recurrence-parser';
-import { ParsedTask, PluginSettings, TemplateHeader } from './types';
+import { ParsedTask, PluginSettings, TemplateHeader, VaultNoteSuggestion } from './types';
 
 export class TaskCaptureModal extends Modal {
 	private editorView: EditorView | null = null;
@@ -180,7 +181,10 @@ export class TaskCaptureModal extends Modal {
 		// Initialize CodeMirror 6 Editor
 		const extensions = createCaptureEditorExtensions({
 			getHeaders: (noteName) => this.getHeadersForNote(noteName),
-			getVaultNotes: () => this.getVaultNoteNames(),
+			getVaultNotes: () => this.getVaultNotes(),
+			isHeaderExisting: (headerName, noteName) =>
+				this.isHeaderExisting(headerName, noteName, this.currentParsed?.date),
+			newHeaderLevel: this.settings.newHeaderLevel || 2,
 			defaultHeader: this.settings.defaultHeader,
 			defaultCustomNoteHeader: this.settings.defaultCustomNoteHeader || 'Todos',
 			timeFormat: this.settings.timeFormat,
@@ -215,9 +219,8 @@ export class TaskCaptureModal extends Modal {
 	}
 
 	private getHeadersForNote(targetNote?: string | null): TemplateHeader[] {
-		const baseHeaders = this.templateParser.getHeaders(this.settings.recentHeaders);
 		if (!targetNote) {
-			return baseHeaders;
+			return this.templateParser.getHeaders(this.settings.recentHeaders);
 		}
 
 		const cleanName = targetNote.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
@@ -229,12 +232,12 @@ export class TaskCaptureModal extends Modal {
 		);
 
 		if (!targetFile) {
-			return baseHeaders;
+			return [];
 		}
 
 		const cache = this.app.metadataCache.getFileCache(targetFile);
 		if (!cache || !cache.headings || cache.headings.length === 0) {
-			return baseHeaders;
+			return [];
 		}
 
 		const noteHeaders: TemplateHeader[] = cache.headings.map((h) => ({
@@ -254,30 +257,108 @@ export class TaskCaptureModal extends Modal {
 			}
 		}
 
-		for (const h of baseHeaders) {
-			const lower = h.heading.toLowerCase();
-			if (!existingNames.has(lower)) {
-				existingNames.add(lower);
-				combined.push(h);
-			}
-		}
-
 		return combined;
 	}
 
-	private getVaultNoteNames(): string[] {
-		const recents = this.settings.recentNotes || [];
-		const files = this.app.vault.getMarkdownFiles();
-		const allNames = files.map((f) => f.basename);
+	private isHeaderExisting(
+		headerName: string,
+		targetNote?: string | null,
+		dateMoment?: moment.Moment | null
+	): boolean {
+		if (!headerName) return false;
+		const cleanTargetHeader = headerName.toLowerCase().replace(/[*_`#[\]@]/g, '').trim();
+		if (!cleanTargetHeader) return false;
 
-		// Place recent notes at the top
-		const ordered: string[] = [...recents];
-		for (const name of allNames) {
-			if (!ordered.some((r) => r.toLowerCase() === name.toLowerCase())) {
-				ordered.push(name);
+		if (targetNote) {
+			const cleanName = targetNote.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
+			const files = this.app.vault.getMarkdownFiles();
+			const targetFile = files.find(
+				(f) =>
+					f.basename.toLowerCase() === cleanName ||
+					f.path.toLowerCase() === cleanName
+			);
+			if (!targetFile) return false;
+
+			const cache = this.app.metadataCache.getFileCache(targetFile);
+			if (!cache || !cache.headings) return false;
+
+			return cache.headings.some(
+				(h) => h.heading.toLowerCase().replace(/[*_`#[\]@]/g, '').trim() === cleanTargetHeader
+			);
+		}
+
+		// Daily note target:
+		// Check 1: Does daily note for this date already exist in vault with this header?
+		let dailyFile: TFile | null = null;
+		try {
+			const allDailyNotes = getAllDailyNotes();
+			const targetDate = dateMoment || this.defaultDateMoment || moment();
+			dailyFile = getDailyNote(targetDate, allDailyNotes);
+		} catch {
+			dailyFile = null;
+		}
+
+		if (dailyFile) {
+			const cache = this.app.metadataCache.getFileCache(dailyFile);
+			if (cache && cache.headings) {
+				const inDailyNote = cache.headings.some(
+					(h) => h.heading.toLowerCase().replace(/[*_`#[\]@]/g, '').trim() === cleanTargetHeader
+				);
+				if (inDailyNote) return true;
 			}
 		}
-		return ordered;
+
+		// Check 2: Does daily note template contain this header?
+		const templateHeaders = this.templateParser.getHeaderNames().map((h) =>
+			h.toLowerCase().replace(/[*_`#[\]@]/g, '').trim()
+		);
+		return templateHeaders.includes(cleanTargetHeader);
+	}
+
+	private getVaultNotes(): VaultNoteSuggestion[] {
+		const recents = this.settings.recentNotes || [];
+		const files = this.app.vault.getMarkdownFiles();
+
+		const fileMap = new Map<string, TFile>();
+		for (const file of files) {
+			fileMap.set(file.basename.toLowerCase(), file);
+		}
+
+		const recentSuggestions: VaultNoteSuggestion[] = [];
+		const seen = new Set<string>();
+
+		// 1. Valid recent notes first (in order of recency)
+		for (const recentName of recents) {
+			const lower = recentName.toLowerCase();
+			const file = fileMap.get(lower);
+			if (file && !seen.has(lower)) {
+				seen.add(lower);
+				recentSuggestions.push({
+					name: file.basename,
+					path: file.path,
+					isRecent: true,
+				});
+			}
+		}
+
+		// 2. Remaining vault notes, sorted alphabetically (case-insensitive)
+		const otherSuggestions: VaultNoteSuggestion[] = [];
+		for (const file of files) {
+			const lower = file.basename.toLowerCase();
+			if (!seen.has(lower)) {
+				seen.add(lower);
+				otherSuggestions.push({
+					name: file.basename,
+					path: file.path,
+					isRecent: false,
+				});
+			}
+		}
+		otherSuggestions.sort((a, b) =>
+			a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+		);
+
+		return [...recentSuggestions, ...otherSuggestions];
 	}
 
 	private updatePreviewBadges(parsed: ParsedTask): void {
@@ -326,8 +407,23 @@ export class TaskCaptureModal extends Modal {
 		}
 
 		// 4. Header badge
-		const headerLabel = parsed.header || (parsed.targetNote ? 'Todos' : this.settings.defaultHeader);
-		this.headerBadgeEl.setText(`🏷️ @${headerLabel}`);
+		const headerLabel =
+			parsed.header ||
+			(parsed.targetNote
+				? this.settings.defaultCustomNoteHeader || 'Todos'
+				: this.settings.defaultHeader);
+		const exists = this.isHeaderExisting(headerLabel, parsed.targetNote, parsed.date);
+		const hashes = '#'.repeat(Math.max(1, Math.min(6, this.settings.newHeaderLevel || 2)));
+
+		if (!exists && headerLabel) {
+			this.headerBadgeEl.setText(
+				`🏷️ @${headerLabel} ✨ (will create ${hashes} ${headerLabel})`
+			);
+			this.headerBadgeEl.addClass('dnt-badge-new-header');
+		} else {
+			this.headerBadgeEl.setText(`🏷️ @${headerLabel}`);
+			this.headerBadgeEl.removeClass('dnt-badge-new-header');
+		}
 
 		// 5. Clean task text result preview
 		const taskContent = parsed.finalTaskText || parsed.cleanText;

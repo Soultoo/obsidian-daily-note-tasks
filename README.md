@@ -1,92 +1,143 @@
-# Obsidian Sample Plugin
+# Obsidian Daily Note Tasks
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+A powerful, Todoist-inspired task capture and management plugin for [Obsidian](https://obsidian.md). Capture tasks in natural language, route them instantly to daily notes or custom project files, schedule recurring tasks, and move existing tasks with zero friction.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+![Quick Task Capture](https://raw.githubusercontent.com/Soultoo/obsidian-daily-note-tasks/main/manifest.json)
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
+---
 
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and outputs a Notice on click.
-- Registers a global interval which logs 'setInterval' to the console.
+## Key Features
 
-## First time developing plugins?
+### 1. Todoist-Style Natural Language Task Capture
+Quickly capture tasks anywhere in your vault using a streamlined CodeMirror 6 capture modal:
+- **Shortcut Trigger**: Use the ribbon icon or command palette (`Quick task capture (nlp)`).
+- **Interactive Syntax Highlighting**:
+  - `blue` for dates (`today`, `tomorrow`, `tod`, `tom`, `Nov 15`, `in 2 days`, `next monday`).
+  - `red` for section headers (`@Tasks`, `@"Written plan"`).
+  - `green` for target notes (`/groceries`, `/"Project Apollo"`).
+  - `purple` for recurrence schedules (`every day`, `every 2 days`, `every weekday`).
+- **Live Preview Badges**: See real-time breakdown of destination note, date, time, section, and final clean formatted task bullet before saving.
+- **Keyboard-First Workflow**: Press `Enter` to save, `Escape` to cancel. Use the quick toolbar to insert `/`, `@`, `#`, `tod`, `tom`, or `every` with one click.
 
-Quick starting guide for new plugin devs:
+---
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `src/main.ts` to `main.js`.
-- Make changes to `src/main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+### 2. Context-Aware Section Autocomplete (`@`)
+- **Daily Note Template Integration**: When adding tasks to your daily note, typing `@` autocompletes sections directly from your daily note template.
+- **Note-Specific Autocomplete**: When a target note is specified with `/` (e.g. `/Groceries @`), `@` inspects and suggests only headers already present in that specific note.
+- **Recently Used Sections**: Recent sections are boosted to the top of the autocomplete list and marked with `🕒 Recent • H#`.
+- **New Section Detection**: If you type a section header that does not exist yet:
+  - Highlighted with a distinct amber underline and preview tooltip (`✨ Will create ## <header>`).
+  - Automatically creates the section at your configured heading level (H1–H6, default `##`).
+  - Optional setting to automatically insert an inline `+ add task` button under newly created sections.
 
-## Releasing new releases
+---
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### 3. Vault Note Autocomplete & Recent Tracking (`/`)
+- Type `/` to target any markdown file in your vault.
+- **Recently Used Notes First**: Recent notes are saved and boosted to the top with a `🕒 Recent • Note` badge.
+- **Alphabetical Vault Search**: Remaining notes in your vault are sorted alphabetically (A–Z) for rapid discovery.
+- **Smart Quoting**: Note titles with spaces or special characters are automatically wrapped in quotes (e.g. `/"Obsidian plugin development"`).
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+---
 
-## Adding your plugin to the community plugin list
+### 4. Zero-Click Move Task (`Move task to date`)
+Move existing tasks and multi-line task blocks with zero mouse clicks:
+- Place the cursor on any task bullet and run `Move task to date (zero click)`.
+- **Smart AST Parser**: Automatically extracts the full task item and all nested child bullets, notes, and sub-items, even across blank lines, without capturing sibling tasks.
+- **Quick Date Chips**: One-click chips for `Today`, `Tomorrow`, `Next Monday`, or `In 1 Week`.
+- **Target Anywhere**: Supports moving to any natural language date or target note/section.
+- **Timestamp Handling**: Preserves or updates timestamps seamlessly based on your preferred format.
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+---
 
-## How to use
+### 5. Automated Recurring Tasks Engine
+Set up recurring tasks that automatically inject into your daily notes:
+- **Natural Language Blueprints**: Create recurring tasks directly from the capture modal (e.g. `Water plants every 2 days @Todos`) or through the **Manage recurring tasks** modal.
+- **Supported Patterns**:
+  - `every day`, `every X days`
+  - `every weekday` (Monday through Friday)
+  - `every week`, `every X weeks on <day>` (e.g. `every 3 weeks on friday`)
+  - `every month on the <ordinal>` (e.g. `every month on the 1st`, `every month on the 15th`)
+  - `every year`
+- **Daily Note Creation Hook**: When a daily note is created, all blueprints due on that day are automatically injected under their target sections.
+- **Forward Sweeping & Safe Deletion**:
+  - Adding a blueprint sweeps today and all already-created future daily notes.
+  - Canceling/deleting a blueprint sweeps and removes future orphaned task instances.
+- **Cursive Formatting**: Optional setting to format recurring tasks in italics matching vault template style (e.g. `- [ ] *Water plants* #home`).
 
-- Clone this repo.
-- Make sure your NodeJS is at least v18 (`node --version`).
-- `npm i` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+---
 
-## Manually installing the plugin
+### 6. Inline `+ Add Task` Code Block Buttons
+Embed interactive "+ Add Task" buttons directly into your notes:
+````markdown
+```task-add
+note: groceries
+header: Produce
+label: + Add Grocery Item
+```
+````
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+- **Context Detection**: If `header` or `note` is omitted, the button automatically detects the enclosing markdown heading and current file.
+- **Rapid Sequential Entry**: Automatically reopens the capture modal after submitting a task so you can quickly capture multiple items in a row.
+- **Insert Modal**: Run `Insert "+ add task" button code block` to configure and insert button blocks at cursor via an interactive preview dialog.
 
-## Improve code quality with eslint
+---
 
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
+### 7. Configurable Navigation & Open Behavior
+- **Open Note on Task Add**: Automatically open the target note and highlight (select) the newly inserted task line with an accent flash animation.
+- **Tab Management**: Choose whether to open in the active tab or a new tab, and whether to switch focus (`Swap to new tab`) or keep working in the background.
 
-## Funding URL
+---
 
-You can include funding URLs where people who use your plugin can financially support it.
+## Quick Reference / Cheat Sheet
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+| Syntax | Description | Example |
+| :--- | :--- | :--- |
+| `/note` | Target vault note | `/groceries`, `/"Project Apollo"` |
+| `@section` | Target heading/section | `@Todos`, `@"Written plan"` |
+| `#tag` | Preserve Obsidian tags | `#work`, `#errands` |
+| `tod` / `tom` | Today or tomorrow | `Buy groceries tod`, `Prepare slides tom` |
+| Natural date | Specific calendar date | `Submit taxes on April 15`, `next monday` |
+| Natural time | Time of day | `14:00`, `at 5:30 pm`, `9am` |
+| `every X Y` | Recurrence blueprint | `every day`, `every weekday`, `every 2 weeks on friday` |
 
-```json
-{
-	"fundingUrl": "https://buymeacoffee.com"
-}
+---
+
+## Installation
+
+### From Community Plugins
+*(Coming soon upon community listing approval)*
+
+### Manual Installation
+1. Download the latest release assets (`main.js`, `manifest.json`, and `styles.css`) from the [Releases](https://github.com/Soultoo/obsidian-daily-note-tasks/releases) page.
+2. In your Obsidian vault, navigate to `.obsidian/plugins/` and create a folder named `obsidian-daily-note-tasks`.
+3. Copy `main.js`, `manifest.json`, and `styles.css` into that folder.
+4. In Obsidian, go to **Settings** → **Community plugins** and enable **Daily Note Tasks**.
+
+---
+
+## Development
+
+```bash
+# Clone repository
+git clone https://github.com/Soultoo/obsidian-daily-note-tasks.git
+cd obsidian-daily-note-tasks
+
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run linter
+npm run lint
+
+# Build production bundle
+npm run build
 ```
 
-If you have multiple URLs, you can also do:
+---
 
-```json
-{
-	"fundingUrl": {
-		"Buy Me a Coffee": "https://buymeacoffee.com",
-		"GitHub Sponsor": "https://github.com/sponsors",
-		"Patreon": "https://www.patreon.com/"
-	}
-}
-```
+## License
 
-## API Documentation
-
-See https://docs.obsidian.md
+MIT License. See [LICENSE](LICENSE) for details.

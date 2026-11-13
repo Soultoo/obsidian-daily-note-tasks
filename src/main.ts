@@ -52,7 +52,7 @@ export default class DailyNoteTasksPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.templateParser = new TemplateParser(this.app);
-		this.dailyNoteManager = new DailyNoteManager(this.app);
+		this.dailyNoteManager = new DailyNoteManager(this.app, () => this.settings);
 		this.taskAstParser = new TaskAstParser(this.app);
 		this.recurringManager = new RecurringManager(
 			this.app,
@@ -159,14 +159,12 @@ export default class DailyNoteTasksPlugin extends Plugin {
 
 				if (explicitNote) {
 					const noteLower = explicitNote.toLowerCase();
-					if (noteLower === 'today' || noteLower === 'tod' || noteLower === 'idag') {
+					if (noteLower === 'today' || noteLower === 'tod') {
 						isDaily = true;
 						dailyMoment = moment();
 					} else if (
 						noteLower === 'tomorrow' ||
-						noteLower === 'tom' ||
-						noteLower === 'imorgon' ||
-						noteLower === 'imorn'
+						noteLower === 'tom'
 					) {
 						isDaily = true;
 						dailyMoment = moment().add(1, 'day');

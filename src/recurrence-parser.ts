@@ -5,43 +5,29 @@ import { RecurrenceRule, Span } from './types';
 const DAY_MAP: Record<string, number> = {
 	sun: 0,
 	sunday: 0,
-	söndag: 0,
-	sön: 0,
 	mon: 1,
 	monday: 1,
-	måndag: 1,
-	mån: 1,
 	tue: 2,
 	tuesday: 2,
-	tisdag: 2,
-	tis: 2,
 	wed: 3,
 	wednesday: 3,
-	onsdag: 3,
-	ons: 3,
 	thu: 4,
 	thursday: 4,
-	torsdag: 4,
-	tor: 4,
 	fri: 5,
 	friday: 5,
-	fredag: 5,
-	fre: 5,
 	sat: 6,
 	saturday: 6,
-	lördag: 6,
-	lör: 6,
 };
 
 export function parseRecurrenceFromText(
 	input: string,
 	baseDateMoment: Moment = moment()
 ): { rule: RecurrenceRule | null; span: Span | null } {
-	// 1. Matches base frequency: "every 2 days", "every weekday", "every month", "every week", "varje 2 dagar", etc.
-	// 2. Strict, non-greedy on/på clause: ONLY matches ordinals (e.g. "the 1st", "15th", "den 1:a") or weekday names.
+	// 1. Matches base frequency: "every 2 days", "every weekday", "every month", "every week", etc.
+	// 2. Strict, non-greedy on clause: ONLY matches ordinals (e.g. "the 1st", "15th") or weekday names.
 	// Does NOT swallow regular task words like "yay first day thing"!
 	const regex =
-		/(?:^|\s)(every|varje)\s+(\d+)?\s*(day|days|dag|dagar|week|weeks|vecka|veckor|month|months|månad|månader|year|years|år|weekday|weekdays|vardag|vardagar|mon|tue|wed|thu|fri|sat|sun|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)(?:\s+(?:on|på)\s+(?:the\s+|den\s+)?(\d{1,2}(?:st|nd|rd|th|:e|:a)?|(?:(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mån|tis|ons|tor|fre|lör|sön|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)(?:[,\s]+(?:and|och)?[,\s]*)*)))?(?=$|\s|@)/i;
+		/(?:^|\s)(every)\s+(\d+)?\s*(day|days|week|weeks|month|months|year|years|weekday|weekdays|mon|tue|wed|thu|fri|sat|sun)(?:\s+on\s+(?:the\s+)?(\d{1,2}(?:st|nd|rd|th)?|(?:(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:[,\s]+and?[,\s]*)*)))?(?=$|\s|@)/i;
 
 	const match = input.match(regex);
 	if (!match || match.index === undefined) {
@@ -63,39 +49,19 @@ export function parseRecurrenceFromText(
 	let daysOfWeek: number[] | undefined = undefined;
 	let dayOfMonth: number | undefined = undefined;
 
-	if (
-		unitStr === 'day' ||
-		unitStr === 'days' ||
-		unitStr === 'dag' ||
-		unitStr === 'dagar'
-	) {
+	if (unitStr === 'day' || unitStr === 'days') {
 		unit = 'day';
-	} else if (
-		unitStr === 'weekday' ||
-		unitStr === 'weekdays' ||
-		unitStr === 'vardag' ||
-		unitStr === 'vardagar'
-	) {
+	} else if (unitStr === 'weekday' || unitStr === 'weekdays') {
 		unit = 'week';
 		daysOfWeek = [1, 2, 3, 4, 5]; // Mon - Fri
-	} else if (
-		unitStr === 'week' ||
-		unitStr === 'weeks' ||
-		unitStr === 'vecka' ||
-		unitStr === 'veckor'
-	) {
+	} else if (unitStr === 'week' || unitStr === 'weeks') {
 		unit = 'week';
 		if (onClause) {
 			daysOfWeek = parseDaysOfWeek(onClause);
 		} else {
 			daysOfWeek = [baseDateMoment.day()];
 		}
-	} else if (
-		unitStr === 'month' ||
-		unitStr === 'months' ||
-		unitStr === 'månad' ||
-		unitStr === 'månader'
-	) {
+	} else if (unitStr === 'month' || unitStr === 'months') {
 		unit = 'month';
 		if (onClause) {
 			const dayNum = parseInt(onClause.replace(/\D/g, ''), 10);
@@ -107,11 +73,7 @@ export function parseRecurrenceFromText(
 		} else {
 			dayOfMonth = baseDateMoment.date();
 		}
-	} else if (
-		unitStr === 'year' ||
-		unitStr === 'years' ||
-		unitStr === 'år'
-	) {
+	} else if (unitStr === 'year' || unitStr === 'years') {
 		unit = 'year';
 	} else if (DAY_MAP[unitStr] !== undefined) {
 		unit = 'week';

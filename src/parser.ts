@@ -7,14 +7,14 @@ function createCustomChrono() {
 	const custom = chrono.casual.clone();
 
 	custom.parsers.unshift({
-		pattern: () => /(?:^|\b)(tod|tom|idag|imorgon|imorn)(?=\W|$)/i,
+		pattern: () => /(?:^|\b)(tod|tom)(?=\W|$)/i,
 		extract: (context, match) => {
 			const text = match[1]?.toLowerCase();
 			const comp = context.createParsingComponents();
 			const refDate = context.refDate;
 			const target = new Date(refDate.getTime());
 
-			if (text === 'tom' || text === 'imorgon' || text === 'imorn') {
+			if (text === 'tom') {
 				target.setDate(target.getDate() + 1);
 			}
 
@@ -161,9 +161,6 @@ export function parseTaskInput(
 			if (
 				lower.includes('tod') ||
 				lower.includes('tom') ||
-				lower.includes('idag') ||
-				lower.includes('imorgon') ||
-				lower.includes('imorn') ||
 				lower.includes('today') ||
 				lower.includes('tomorrow')
 			) {

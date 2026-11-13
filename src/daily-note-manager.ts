@@ -4,7 +4,7 @@ import {
 	getAllDailyNotes,
 	getDailyNote,
 } from 'obsidian-daily-notes-interface';
-import type { Moment } from './types';
+import type { Moment, PluginSettings } from './types';
 
 interface LeafWithParentTab {
 	parent?: {
@@ -14,9 +14,11 @@ interface LeafWithParentTab {
 
 export class DailyNoteManager {
 	private app: App;
+	private getSettings?: () => PluginSettings;
 
-	constructor(app: App) {
+	constructor(app: App, getSettings?: () => PluginSettings) {
 		this.app = app;
+		this.getSettings = getSettings;
 	}
 
 	/**
@@ -52,9 +54,19 @@ export class DailyNoteManager {
 			throw new Error(`Could not find or create daily note for ${targetDate.format('YYYY-MM-DD')}`);
 		}
 
+		const settings = this.getSettings?.();
+		const newHeaderLevel = settings?.newHeaderLevel ?? 2;
+		const addCodeBlock = settings?.addCodeBlockUnderNewHeaders ?? false;
+
 		let insertedLine = -1;
 		await this.app.vault.process(dailyFile, (data) => {
-			const result = this.insertTaskUnderHeader(data, headerName, taskContent);
+			const result = this.insertTaskUnderHeader(
+				data,
+				headerName,
+				taskContent,
+				newHeaderLevel,
+				addCodeBlock
+			);
 			insertedLine = result.insertedLine;
 			return result.content;
 		});
@@ -93,11 +105,20 @@ export class DailyNoteManager {
 			}
 		}
 
-		let insertedLine = -1;
-		const effectiveHeader = headerName || 'Todos';
+		const settings = this.getSettings?.();
+		const newHeaderLevel = settings?.newHeaderLevel ?? 2;
+		const addCodeBlock = settings?.addCodeBlockUnderNewHeaders ?? false;
+		const effectiveHeader = headerName || settings?.defaultCustomNoteHeader || 'Todos';
 
+		let insertedLine = -1;
 		await this.app.vault.process(targetFile, (data) => {
-			const result = this.insertTaskUnderHeader(data, effectiveHeader, taskContent);
+			const result = this.insertTaskUnderHeader(
+				data,
+				effectiveHeader,
+				taskContent,
+				newHeaderLevel,
+				addCodeBlock
+			);
 			insertedLine = result.insertedLine;
 			return result.content;
 		});
@@ -233,7 +254,9 @@ export class DailyNoteManager {
 	public insertTaskUnderHeader(
 		content: string,
 		headerName: string,
-		taskContent: string
+		taskContent: string,
+		newHeaderLevel = 2,
+		addCodeBlock = false
 	): { content: string; insertedLine: number } {
 		const formattedTask = taskContent.startsWith('- [ ]')
 			? taskContent
@@ -277,11 +300,13 @@ export class DailyNoteManager {
 			}
 		}
 
-		// If header not found anywhere, append header (## Header) and task at bottom
+		// If header not found anywhere, append header and task at bottom
 		if (headerLineIndex === -1) {
 			const trimmedContent = content.trimEnd();
-			const newSection = `\n\n## ${headerName}\n${formattedTask}\n`;
-			const newContent = trimmedContent ? `${trimmedContent}${newSection}` : `## ${headerName}\n${formattedTask}\n`;
+			const hashes = '#'.repeat(Math.max(1, Math.min(6, newHeaderLevel)));
+			const codeBlockPart = addCodeBlock ? '```task-add\n```\n' : '';
+			const newSection = `\n\n${hashes} ${headerName}\n${codeBlockPart}${formattedTask}\n`;
+			const newContent = trimmedContent ? `${trimmedContent}${newSection}` : `${hashes} ${headerName}\n${codeBlockPart}${formattedTask}\n`;
 			return {
 				content: newContent,
 				insertedLine: newContent.split('\n').length - 2,

@@ -69,6 +69,38 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 					});
 			});
 
+		// Heading level for new sections
+		new Setting(containerEl)
+			.setName('New section heading level')
+			.setDesc('Heading level (h1 to h6) used when creating a new section in a note.')
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption('1', 'H1 (#)')
+					.addOption('2', 'H2 (##)')
+					.addOption('3', 'H3 (###)')
+					.addOption('4', 'H4 (####)')
+					.addOption('5', 'H5 (#####)')
+					.addOption('6', 'H6 (######)')
+					.setValue(String(this.plugin.settings.newHeaderLevel ?? 2))
+					.onChange(async (value) => {
+						this.plugin.settings.newHeaderLevel = parseInt(value, 10);
+						await this.plugin.saveSettings();
+					});
+			});
+
+		// Code block under new sections
+		new Setting(containerEl)
+			.setName('Add "+ add task" button under new sections')
+			.setDesc('Automatically insert an inline "+ add task" code block button beneath newly created section headers.')
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.addCodeBlockUnderNewHeaders === true)
+					.onChange(async (value) => {
+						this.plugin.settings.addCodeBlockUnderNewHeaders = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
 		// Time Options
 		new Setting(containerEl).setName('Time formatting').setHeading();
 
@@ -290,6 +322,30 @@ export class DailyNoteTasksSettingTab extends PluginSettingTab {
 							type: 'text',
 							key: 'defaultCustomNoteHeader',
 							placeholder: 'Todos',
+						},
+					},
+					{
+						name: 'New section heading level',
+						desc: 'Heading level (h1 to h6) used when creating a new section in a note.',
+						control: {
+							type: 'dropdown',
+							key: 'newHeaderLevel',
+							options: {
+								'1': 'H1 (#)',
+								'2': 'H2 (##)',
+								'3': 'H3 (###)',
+								'4': 'H4 (####)',
+								'5': 'H5 (#####)',
+								'6': 'H6 (######)',
+							},
+						},
+					},
+					{
+						name: 'Add "+ add task" button under new sections',
+						desc: 'Automatically insert an inline "+ add task" code block button beneath newly created section headers.',
+						control: {
+							type: 'toggle',
+							key: 'addCodeBlockUnderNewHeaders',
 						},
 					},
 				],

@@ -43,6 +43,12 @@ export interface TemplateHeader {
 	isRecent?: boolean;
 }
 
+export interface VaultNoteSuggestion {
+	name: string;
+	path: string;
+	isRecent?: boolean;
+}
+
 export interface RecurringBlueprint {
 	id: string;
 	name: string;
@@ -54,6 +60,8 @@ export interface RecurringBlueprint {
 export interface PluginSettings {
 	defaultHeader: string;
 	defaultCustomNoteHeader: string;
+	newHeaderLevel: number;
+	addCodeBlockUnderNewHeaders: boolean;
 	dateFormat: string;
 	timeFormat: string;
 	timePosition: 'natural' | 'prefix' | 'suffix';
@@ -70,6 +78,8 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: PluginSettings = {
 	defaultHeader: 'Written plan',
 	defaultCustomNoteHeader: 'Todos',
+	newHeaderLevel: 2,
+	addCodeBlockUnderNewHeaders: false,
 	dateFormat: 'YYYY-MM-DD',
 	timeFormat: 'HH:mm',
 	timePosition: 'natural',

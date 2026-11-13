@@ -48,7 +48,7 @@ export class RecurringTasksModal extends Modal {
 			.setName('Task description')
 			.addText((text) =>
 				text
-					.setPlaceholder('E.g. Water plants, dagbok!')
+					.setPlaceholder('E.g. Water plants, daily journal')
 					.onChange((val) => (taskName = val.trim()))
 			);
 
