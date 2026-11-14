@@ -115,10 +115,13 @@ export function parseTaskInput(
 	const recurrenceText = recParsed.rule ? recParsed.rule.rawText : null;
 
 	// ----------------------------------------------------
-	// STEP 4: Mask out target note, header, and recurrence before Chrono
-	// (Prevents "@20 minute stuff" or "/groceries 2" from parsing as dates/times!)
+	// STEP 4: Mask out target note, header, recurrence, and wikilinks before Chrono
+	// (Prevents "@20 minute stuff", "/groceries 2", or "[[May 5]]" from parsing as dates/times!)
 	// ----------------------------------------------------
 	let maskedForChrono = input;
+
+	// Mask out wikilinks [[...]] before Chrono so note names containing dates/days aren't parsed as task dates
+	maskedForChrono = maskedForChrono.replace(/\[\[[^\]\n]+\]\]/g, (match) => ' '.repeat(match.length));
 
 	if (targetNoteSpan) {
 		const spaces = ' '.repeat(targetNoteSpan.to - targetNoteSpan.from);
@@ -205,8 +208,8 @@ export function parseTaskInput(
 	cleanText = cleanText
 		.replace(/\s+/g, ' ')
 		.replace(/\s+([,:;?!])\s+/g, ' ')
-		.replace(/\s+(at|on|by|in|due|for|kl|klockan)\s*$/i, '')
-		.replace(/^(at|on|by|in|due|for|kl|klockan)\s+/i, '')
+		.replace(/\s+(at|on|by|in|due|for)\s*$/i, '')
+		.replace(/^(at|on|by|in|due|for)\s+/i, '')
 		.trim();
 
 	// ----------------------------------------------------

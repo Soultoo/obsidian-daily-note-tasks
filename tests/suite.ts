@@ -725,6 +725,149 @@ console.log('\n--- 9. Declarative Settings Search API Definitions Tests ---');
 	assertEqual(addCodeBlockDef?.name, 'Add "+ add task" button under new sections', 'settings search: addCodeBlockUnderNewHeaders name matches');
 }
 
+// ----------------------------------------------------
+// 12. Wikilinks & Auto-Pairing Tests
+// ----------------------------------------------------
+console.log('--- 12. Wikilinks & Auto-Pairing Tests ---');
+
+// Test 12.1: Single wikilink preserved in cleanText and finalTaskText
+{
+	const r = parseTaskInput('Review [[Project Apollo]] tod 15:00', templateHeaders);
+	assertEqual(r.cleanText, 'Review [[Project Apollo]]', 'wikilinks: cleanText preserves [[Project Apollo]]');
+	assertEqual(r.finalTaskText, 'Review [[Project Apollo]] 15:00', 'wikilinks: finalTaskText preserves time and link');
+	assertEqual(r.hasTime, true, 'wikilinks: hasTime is true');
+	assertEqual(r.timeStr, '15:00', 'wikilinks: timeStr is 15:00');
+}
+
+// Test 12.2: Multiple wikilinks preserved without semantic confusion
+{
+	const r = parseTaskInput('Sync with [[Alice]] and [[Bob]] regarding [[Roadmap 2026]] /groceries @Produce', templateHeaders);
+	assertEqual(r.targetNote, 'groceries', 'wikilinks: extracted /groceries');
+	assertEqual(r.header, 'Produce', 'wikilinks: extracted @Produce');
+	assertEqual(r.cleanText, 'Sync with [[Alice]] and [[Bob]] regarding [[Roadmap 2026]]', 'wikilinks: all 3 wikilinks preserved in cleanText');
+}
+
+// Test 12.3: Wikilink containing date / day words does not get swallowed by Chrono
+{
+	const r = parseTaskInput('Call [[Dr. Friday]] about [[May 5 Report]] tod', templateHeaders);
+	assertEqual(r.date?.format('YYYY-MM-DD'), moment().format('YYYY-MM-DD'), 'wikilinks: date is today, not Friday or May 5');
+	assertEqual(r.cleanText, 'Call [[Dr. Friday]] about [[May 5 Report]]', 'wikilinks: date-like note titles preserved intact');
+}
+
+// Test 12.4: Quoted target note with wikilinks
+{
+	const r = parseTaskInput('Follow up on [[Invoice 42]] /"Finances & Accounts" @"Q1 Taxes"', templateHeaders);
+	assertEqual(r.targetNote, 'Finances & Accounts', 'wikilinks: quoted target note extracted');
+	assertEqual(r.header, 'Q1 Taxes', 'wikilinks: quoted header extracted');
+	assertEqual(r.cleanText, 'Follow up on [[Invoice 42]]', 'wikilinks: cleanText preserves [[Invoice 42]]');
+}
+
+// Test 12.5: Atomic Backspace simulation on empty delimiters
+{
+	function simulateBackspace(docText: string, cursor: number) {
+		const from = cursor;
+		const docLen = docText.length;
+
+		// /""
+		if (from >= 2 && from + 1 <= docLen) {
+			const before = docText.slice(from - 2, from);
+			const after = docText.slice(from, from + 1);
+			if (before === '/"' && after === '"') {
+				let deleteFrom = from - 2;
+				if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === ' ') {
+					deleteFrom -= 1;
+				}
+				return {
+					newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+					newCursor: deleteFrom,
+					handled: true,
+				};
+			}
+		}
+
+		// @""
+		if (from >= 2 && from + 1 <= docLen) {
+			const before = docText.slice(from - 2, from);
+			const after = docText.slice(from, from + 1);
+			if (before === '@"' && after === '"') {
+				let deleteFrom = from - 2;
+				if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === ' ') {
+					deleteFrom -= 1;
+				}
+				return {
+					newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+					newCursor: deleteFrom,
+					handled: true,
+				};
+			}
+		}
+
+		// [[]]
+		if (from >= 2 && from + 2 <= docLen) {
+			const before = docText.slice(from - 2, from);
+			const after = docText.slice(from, from + 2);
+			if (before === '[[' && after === ']]') {
+				let deleteFrom = from - 2;
+				if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === ' ') {
+					deleteFrom -= 1;
+				}
+				return {
+					newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 2),
+					newCursor: deleteFrom,
+					handled: true,
+				};
+			}
+		}
+
+		// []
+		if (from >= 1 && from + 1 <= docLen) {
+			const before = docText.slice(from - 1, from);
+			const after = docText.slice(from, from + 1);
+			if (before === '[' && after === ']') {
+				let deleteFrom = from - 1;
+				if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === ' ') {
+					deleteFrom -= 1;
+				}
+				return {
+					newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+					newCursor: deleteFrom,
+					handled: true,
+				};
+			}
+		}
+
+		return { newDoc: docText, newCursor: cursor, handled: false };
+	}
+
+	// 1. Backspace inside /"" deletes the whole /"" and leading space
+	const bs1 = simulateBackspace('Buy milk /""', 11);
+	assertEqual(bs1.handled, true, 'backspace: /"" handled');
+	assertEqual(bs1.newDoc, 'Buy milk', 'backspace: deleted /"" and leading space');
+	assertEqual(bs1.newCursor, 8, 'backspace: cursor at end of Buy milk');
+
+	// 2. Backspace inside @"" deletes the whole @"" and leading space
+	const bs2 = simulateBackspace('Task @""', 7);
+	assertEqual(bs2.handled, true, 'backspace: @"" handled');
+	assertEqual(bs2.newDoc, 'Task', 'backspace: deleted @"" and leading space');
+	assertEqual(bs2.newCursor, 4, 'backspace: cursor at end of Task');
+
+	// 3. Backspace inside [[]] deletes the whole [[]] and leading space
+	const bs3 = simulateBackspace('Check [[]]', 8);
+	assertEqual(bs3.handled, true, 'backspace: [[]] handled');
+	assertEqual(bs3.newDoc, 'Check', 'backspace: deleted [[]] and leading space');
+	assertEqual(bs3.newCursor, 5, 'backspace: cursor at end of Check');
+
+	// 4. Backspace inside [[]] at start of document
+	const bs4 = simulateBackspace('[[]]', 2);
+	assertEqual(bs4.handled, true, 'backspace: [[]] at start handled');
+	assertEqual(bs4.newDoc, '', 'backspace: document is now empty');
+	assertEqual(bs4.newCursor, 0, 'backspace: cursor at 0');
+
+	// 5. Backspace with text inside [[]] is NOT intercepted (allows normal letter deletion)
+	const bs5 = simulateBackspace('[[Apollo]]', 8);
+	assertEqual(bs5.handled, false, 'backspace: text inside [[]] not intercepted');
+}
+
 console.log(`\n=== ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===\n`);
 if (failed > 0) {
 	process.exit(1);

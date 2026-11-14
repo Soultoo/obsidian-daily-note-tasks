@@ -7429,6 +7429,7 @@ function parseTaskInput(input, availableHeaders = [], defaultHeader = "Written p
   const recurrenceSpan = recParsed.span;
   const recurrenceText = recParsed.rule ? recParsed.rule.rawText : null;
   let maskedForChrono = input;
+  maskedForChrono = maskedForChrono.replace(/\[\[[^\]\n]+\]\]/g, (match) => " ".repeat(match.length));
   if (targetNoteSpan) {
     const spaces = " ".repeat(targetNoteSpan.to - targetNoteSpan.from);
     maskedForChrono = maskedForChrono.slice(0, targetNoteSpan.from) + spaces + maskedForChrono.slice(targetNoteSpan.to);
@@ -7480,7 +7481,7 @@ function parseTaskInput(input, availableHeaders = [], defaultHeader = "Written p
   for (const span of spansToRemove) {
     cleanText = cleanText.slice(0, span.from) + cleanText.slice(span.to);
   }
-  cleanText = cleanText.replace(/\s+/g, " ").replace(/\s+([,:;?!])\s+/g, " ").replace(/\s+(at|on|by|in|due|for|kl|klockan)\s*$/i, "").replace(/^(at|on|by|in|due|for|kl|klockan)\s+/i, "").trim();
+  cleanText = cleanText.replace(/\s+/g, " ").replace(/\s+([,:;?!])\s+/g, " ").replace(/\s+(at|on|by|in|due|for)\s*$/i, "").replace(/^(at|on|by|in|due|for)\s+/i, "").trim();
   let finalTaskText = cleanText;
   if (hasTime && timeStr && cleanText) {
     const alreadyHasTime = cleanText.includes(timeStr) || /\b\d{1,2}[:.]\d{2}\b/.test(cleanText) || /\b\d{1,2}\s*(am|pm)\b/i.test(cleanText);
@@ -9144,6 +9145,118 @@ console.log("\n--- 9. Declarative Settings Search API Definitions Tests ---");
   assert(addCodeBlockDef !== void 0, "settings search: includes addCodeBlockUnderNewHeaders definition");
   assertEqual(addCodeBlockDef?.name, 'Add "+ add task" button under new sections', "settings search: addCodeBlockUnderNewHeaders name matches");
 }
+console.log("--- 12. Wikilinks & Auto-Pairing Tests ---");
+{
+  const r = parseTaskInput("Review [[Project Apollo]] tod 15:00", templateHeaders);
+  assertEqual(r.cleanText, "Review [[Project Apollo]]", "wikilinks: cleanText preserves [[Project Apollo]]");
+  assertEqual(r.finalTaskText, "Review [[Project Apollo]] 15:00", "wikilinks: finalTaskText preserves time and link");
+  assertEqual(r.hasTime, true, "wikilinks: hasTime is true");
+  assertEqual(r.timeStr, "15:00", "wikilinks: timeStr is 15:00");
+}
+{
+  const r = parseTaskInput("Sync with [[Alice]] and [[Bob]] regarding [[Roadmap 2026]] /groceries @Produce", templateHeaders);
+  assertEqual(r.targetNote, "groceries", "wikilinks: extracted /groceries");
+  assertEqual(r.header, "Produce", "wikilinks: extracted @Produce");
+  assertEqual(r.cleanText, "Sync with [[Alice]] and [[Bob]] regarding [[Roadmap 2026]]", "wikilinks: all 3 wikilinks preserved in cleanText");
+}
+{
+  const r = parseTaskInput("Call [[Dr. Friday]] about [[May 5 Report]] tod", templateHeaders);
+  assertEqual(r.date?.format("YYYY-MM-DD"), (0, import_moment.default)().format("YYYY-MM-DD"), "wikilinks: date is today, not Friday or May 5");
+  assertEqual(r.cleanText, "Call [[Dr. Friday]] about [[May 5 Report]]", "wikilinks: date-like note titles preserved intact");
+}
+{
+  const r = parseTaskInput('Follow up on [[Invoice 42]] /"Finances & Accounts" @"Q1 Taxes"', templateHeaders);
+  assertEqual(r.targetNote, "Finances & Accounts", "wikilinks: quoted target note extracted");
+  assertEqual(r.header, "Q1 Taxes", "wikilinks: quoted header extracted");
+  assertEqual(r.cleanText, "Follow up on [[Invoice 42]]", "wikilinks: cleanText preserves [[Invoice 42]]");
+}
+{
+  let simulateBackspace = function(docText, cursor) {
+    const from = cursor;
+    const docLen = docText.length;
+    if (from >= 2 && from + 1 <= docLen) {
+      const before = docText.slice(from - 2, from);
+      const after = docText.slice(from, from + 1);
+      if (before === '/"' && after === '"') {
+        let deleteFrom = from - 2;
+        if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === " ") {
+          deleteFrom -= 1;
+        }
+        return {
+          newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+          newCursor: deleteFrom,
+          handled: true
+        };
+      }
+    }
+    if (from >= 2 && from + 1 <= docLen) {
+      const before = docText.slice(from - 2, from);
+      const after = docText.slice(from, from + 1);
+      if (before === '@"' && after === '"') {
+        let deleteFrom = from - 2;
+        if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === " ") {
+          deleteFrom -= 1;
+        }
+        return {
+          newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+          newCursor: deleteFrom,
+          handled: true
+        };
+      }
+    }
+    if (from >= 2 && from + 2 <= docLen) {
+      const before = docText.slice(from - 2, from);
+      const after = docText.slice(from, from + 2);
+      if (before === "[[" && after === "]]") {
+        let deleteFrom = from - 2;
+        if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === " ") {
+          deleteFrom -= 1;
+        }
+        return {
+          newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 2),
+          newCursor: deleteFrom,
+          handled: true
+        };
+      }
+    }
+    if (from >= 1 && from + 1 <= docLen) {
+      const before = docText.slice(from - 1, from);
+      const after = docText.slice(from, from + 1);
+      if (before === "[" && after === "]") {
+        let deleteFrom = from - 1;
+        if (deleteFrom > 0 && docText.slice(deleteFrom - 1, deleteFrom) === " ") {
+          deleteFrom -= 1;
+        }
+        return {
+          newDoc: docText.slice(0, deleteFrom) + docText.slice(from + 1),
+          newCursor: deleteFrom,
+          handled: true
+        };
+      }
+    }
+    return { newDoc: docText, newCursor: cursor, handled: false };
+  };
+  simulateBackspace2 = simulateBackspace;
+  const bs1 = simulateBackspace('Buy milk /""', 11);
+  assertEqual(bs1.handled, true, 'backspace: /"" handled');
+  assertEqual(bs1.newDoc, "Buy milk", 'backspace: deleted /"" and leading space');
+  assertEqual(bs1.newCursor, 8, "backspace: cursor at end of Buy milk");
+  const bs2 = simulateBackspace('Task @""', 7);
+  assertEqual(bs2.handled, true, 'backspace: @"" handled');
+  assertEqual(bs2.newDoc, "Task", 'backspace: deleted @"" and leading space');
+  assertEqual(bs2.newCursor, 4, "backspace: cursor at end of Task");
+  const bs3 = simulateBackspace("Check [[]]", 8);
+  assertEqual(bs3.handled, true, "backspace: [[]] handled");
+  assertEqual(bs3.newDoc, "Check", "backspace: deleted [[]] and leading space");
+  assertEqual(bs3.newCursor, 5, "backspace: cursor at end of Check");
+  const bs4 = simulateBackspace("[[]]", 2);
+  assertEqual(bs4.handled, true, "backspace: [[]] at start handled");
+  assertEqual(bs4.newDoc, "", "backspace: document is now empty");
+  assertEqual(bs4.newCursor, 0, "backspace: cursor at 0");
+  const bs5 = simulateBackspace("[[Apollo]]", 8);
+  assertEqual(bs5.handled, false, "backspace: text inside [[]] not intercepted");
+}
+var simulateBackspace2;
 console.log(`
 === ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===
 `);

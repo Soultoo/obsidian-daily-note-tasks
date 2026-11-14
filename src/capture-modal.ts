@@ -2,7 +2,11 @@ import { App, Modal, Notice, TFile, moment } from 'obsidian';
 import { getAllDailyNotes, getDailyNote } from 'obsidian-daily-notes-interface';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { createCaptureEditorExtensions, insertSymbolAtCursor } from './editor-extensions';
+import {
+	createCaptureEditorExtensions,
+	getVaultNoteSuggestions,
+	insertSymbolAtCursor,
+} from './editor-extensions';
 import { parseTaskInput } from './parser';
 import { DailyNoteManager } from './daily-note-manager';
 import { TemplateParser } from './template-parser';
@@ -99,6 +103,10 @@ export class TaskCaptureModal extends Modal {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '#', false);
 		});
 
+		addSignBtn('[[', 'Link', 'dnt-symbol-link', 'Note link ([[]])', () => {
+			if (this.editorView) insertSymbolAtCursor(this.editorView, '[[', true);
+		});
+
 		addSignBtn('📅', 'Today', 'dnt-symbol-date', 'Today (tod)', () => {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, 'tod', false);
 		});
@@ -149,7 +157,7 @@ export class TaskCaptureModal extends Modal {
 		const buttonsEl = contentEl.createDiv({ cls: 'dnt-button-row' });
 		buttonsEl.createSpan({
 			cls: 'dnt-hint-text',
-			text: 'Enter to save • /note • @section • "every X y" • "tod"/"tom" • #tags',
+			text: 'Enter to save • /note • @section • [[link]] • "every X y" • "tod"/"tom" • #tags',
 		});
 
 		const actionsEl = buttonsEl.createDiv({ cls: 'dnt-actions' });
@@ -316,49 +324,7 @@ export class TaskCaptureModal extends Modal {
 	}
 
 	private getVaultNotes(): VaultNoteSuggestion[] {
-		const recents = this.settings.recentNotes || [];
-		const files = this.app.vault.getMarkdownFiles();
-
-		const fileMap = new Map<string, TFile>();
-		for (const file of files) {
-			fileMap.set(file.basename.toLowerCase(), file);
-		}
-
-		const recentSuggestions: VaultNoteSuggestion[] = [];
-		const seen = new Set<string>();
-
-		// 1. Valid recent notes first (in order of recency)
-		for (const recentName of recents) {
-			const lower = recentName.toLowerCase();
-			const file = fileMap.get(lower);
-			if (file && !seen.has(lower)) {
-				seen.add(lower);
-				recentSuggestions.push({
-					name: file.basename,
-					path: file.path,
-					isRecent: true,
-				});
-			}
-		}
-
-		// 2. Remaining vault notes, sorted alphabetically (case-insensitive)
-		const otherSuggestions: VaultNoteSuggestion[] = [];
-		for (const file of files) {
-			const lower = file.basename.toLowerCase();
-			if (!seen.has(lower)) {
-				seen.add(lower);
-				otherSuggestions.push({
-					name: file.basename,
-					path: file.path,
-					isRecent: false,
-				});
-			}
-		}
-		otherSuggestions.sort((a, b) =>
-			a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-		);
-
-		return [...recentSuggestions, ...otherSuggestions];
+		return getVaultNoteSuggestions(this.app, this.settings.recentNotes);
 	}
 
 	private updatePreviewBadges(parsed: ParsedTask): void {

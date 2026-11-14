@@ -16,8 +16,14 @@ Quickly capture tasks anywhere in your vault using a streamlined CodeMirror 6 ca
   - `red` for section headers (`@Tasks`, `@"Written plan"`).
   - `green` for target notes (`/groceries`, `/"Project Apollo"`).
   - `purple` for recurrence schedules (`every day`, `every 2 days`, `every weekday`).
+  - `cyan` for note wikilinks (`[[Project Apollo]]`, `[[Meeting Notes]]`).
+- **Auto-Pairing & Atomic Backspace**:
+  - Typing `/` or `@` automatically adds quotes (`/""` or `@""`) with the caret placed inside for effortless input with spaces.
+  - Typing `[` automatically creates a paired wikilink (`[[]]`) with the caret inside.
+  - Pressing `Backspace` while between empty carets (`/""`, `@""`, or `[[]]`) deletes the entire delimiter sequence atomically.
+- **Wikilink Completion (`[[`)**: Suggests vault notes directly inside your task text without carrying special routing meaning. Multiple links are fully supported.
 - **Live Preview Badges**: See real-time breakdown of destination note, date, time, section, and final clean formatted task bullet before saving.
-- **Keyboard-First Workflow**: Press `Enter` to save, `Escape` to cancel. Use the quick toolbar to insert `/`, `@`, `#`, `tod`, `tom`, or `every` with one click.
+- **Keyboard-First Workflow**: Press `Enter` to save, `Escape` to cancel. Use the quick toolbar to insert `/`, `@`, `[[`, `#`, `tod`, `tom`, or `every` with one click.
 
 ---
 
@@ -93,8 +99,9 @@ label: + Add Grocery Item
 
 | Syntax | Description | Example |
 | :--- | :--- | :--- |
-| `/note` | Target vault note | `/groceries`, `/"Project Apollo"` |
-| `@section` | Target heading/section | `@Todos`, `@"Written plan"` |
+| `/note` | Target vault note (auto-quotes) | `/groceries`, `/"Project Apollo"` |
+| `@section` | Target heading/section (auto-quotes) | `@Todos`, `@"Written plan"` |
+| `[[note]]` | Embedded vault link | `Review [[Project Apollo]] tod` |
 | `#tag` | Preserve Obsidian tags | `#work`, `#errands` |
 | `tod` / `tom` | Today or tomorrow | `Buy groceries tod`, `Prepare slides tom` |
 | Natural date | Specific calendar date | `Submit taxes on April 15`, `next monday` |

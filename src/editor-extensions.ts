@@ -16,9 +16,12 @@ import {
 	Completion,
 	CompletionContext,
 	CompletionResult,
+	acceptCompletion,
 	autocompletion,
+	closeCompletion,
 	startCompletion,
 } from '@codemirror/autocomplete';
+import type { App, TFile } from 'obsidian';
 import { parseTaskInput } from './parser';
 import { ParsedTask, TemplateHeader, VaultNoteSuggestion } from './types';
 
@@ -41,6 +44,54 @@ function extractNoteNameFromDoc(docText: string): string | null {
 	return noteMatch ? (noteMatch[1] || noteMatch[2] || noteMatch[3] || null) : null;
 }
 
+/**
+ * Returns a sorted list of vault notes with recent notes boosted to the top.
+ */
+export function getVaultNoteSuggestions(
+	app: App,
+	recentNotes: string[] = []
+): VaultNoteSuggestion[] {
+	const files = app.vault.getMarkdownFiles();
+	const fileMap = new Map<string, TFile>();
+	for (const file of files) {
+		fileMap.set(file.basename.toLowerCase(), file);
+	}
+
+	const recentSuggestions: VaultNoteSuggestion[] = [];
+	const seen = new Set<string>();
+
+	for (const recentName of recentNotes) {
+		const lower = recentName.toLowerCase();
+		const file = fileMap.get(lower);
+		if (file && !seen.has(lower)) {
+			seen.add(lower);
+			recentSuggestions.push({
+				name: file.basename,
+				path: file.path,
+				isRecent: true,
+			});
+		}
+	}
+
+	const otherSuggestions: VaultNoteSuggestion[] = [];
+	for (const file of files) {
+		const lower = file.basename.toLowerCase();
+		if (!seen.has(lower)) {
+			seen.add(lower);
+			otherSuggestions.push({
+				name: file.basename,
+				path: file.path,
+				isRecent: false,
+			});
+		}
+	}
+	otherSuggestions.sort((a, b) =>
+		a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+	);
+
+	return [...recentSuggestions, ...otherSuggestions];
+}
+
 export function createCaptureEditorExtensions(options: EditorExtensionOptions): Extension[] {
 	const {
 		getHeaders,
@@ -56,7 +107,7 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		onCancel,
 	} = options;
 
-	// 1. Syntax highlighting plugin for dates (blue), headers (red), recurrence (purple), and target note (green)
+	// 1. Syntax highlighting plugin for dates, headers, recurrence, target notes, and wikilinks
 	const highlightPlugin = ViewPlugin.fromClass(
 		class {
 			decorations: DecorationSet;
@@ -101,7 +152,7 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 
 				const marks: { from: number; to: number; deco: Decoration }[] = [];
 
-				// Green target note highlight (e.g. "/groceries")
+				// Green target note highlight (e.g. "/groceries" or '/"Grocery List"')
 				if (
 					parsed.targetNoteSpan &&
 					parsed.targetNoteSpan.from >= 0 &&
@@ -190,6 +241,22 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 					});
 				}
 
+				// Cyan wikilink highlight (e.g. "[[note]]")
+				const linkRegex = /\[\[([^\]\n]+)\]\]/g;
+				let linkMatch: RegExpExecArray | null;
+				while ((linkMatch = linkRegex.exec(docText)) !== null) {
+					marks.push({
+						from: linkMatch.index,
+						to: linkMatch.index + linkMatch[0].length,
+						deco: Decoration.mark({
+							class: 'dnt-nlp-link',
+							attributes: {
+								title: `Link: [[${linkMatch[1]}]]`,
+							},
+						}),
+					});
+				}
+
 				marks.sort((a, b) => a.from - b.from);
 
 				let lastTo = -1;
@@ -208,76 +275,156 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		}
 	);
 
-	// 2. Autocomplete provider for '@' (headers) and '/' (target notes)
+	// 2. Autocomplete provider for '[[', '@', and '/'
 	const autocompleteExtension = autocompletion({
 		override: [
 			(context: CompletionContext): CompletionResult | null => {
-				// Target note autocomplete on '/'
-				const noteWord = context.matchBefore(/\/[^\n@#]*$/);
+				// 1. Wikilink autocomplete on '[['
+				const linkWord = context.matchBefore(/\[\[[^\]\n]*$/);
+				if (linkWord) {
+					const rawNotes = getVaultNotes();
+					const noteSuggestions: VaultNoteSuggestion[] = rawNotes.map((n) =>
+						typeof n === 'string' ? { name: n, path: n, isRecent: false } : n
+					);
+
+					const fromPos = linkWord.from + 2;
+
+					const options: Completion[] = noteSuggestions.map((note, index) => {
+						const detailText = note.isRecent ? '🕒 Recent • Link' : 'Link';
+						const boost = note.isRecent ? 100 - index : 0;
+						return {
+							label: note.name,
+							detail: detailText,
+							type: 'variable',
+							boost,
+							apply: (view: EditorView, completion: Completion, from: number, to: number) => {
+								const doc = view.state.doc.toString();
+								const linkPos = linkWord.from;
+								let end = to;
+								if (doc.slice(end, end + 2) === ']]') {
+									end += 2;
+								} else if (doc.slice(end, end + 1) === ']') {
+									end += 1;
+								}
+								const insert = `[[${note.name}]] `;
+								view.dispatch({
+									changes: { from: linkPos, to: end, insert },
+									selection: { anchor: linkPos + insert.length },
+								});
+							},
+						};
+					});
+
+					return {
+						from: fromPos,
+						options,
+					};
+				}
+
+				// 2. Target note autocomplete on '/'
+				const noteWord = context.matchBefore(/\/(?:"[^"]*|[^\n@#]*)$/);
 				if (noteWord) {
 					const rawNotes = getVaultNotes();
 					const noteSuggestions: VaultNoteSuggestion[] = rawNotes.map((n) =>
 						typeof n === 'string' ? { name: n, path: n, isRecent: false } : n
 					);
 
+					const isQuoted = noteWord.text.startsWith('/"');
+					const fromPos = isQuoted ? noteWord.from + 2 : noteWord.from + 1;
+
+					const options: Completion[] = noteSuggestions.map((note, index) => {
+						const detailText = note.isRecent ? '🕒 Recent • Note' : 'Note';
+						const boost = note.isRecent ? 100 - index : 0;
+						return {
+							label: note.name,
+							detail: detailText,
+							type: 'variable',
+							boost,
+							apply: (view: EditorView, completion: Completion, from: number, to: number) => {
+								const doc = view.state.doc.toString();
+								const slashPos = noteWord.from;
+								let end = to;
+								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								const insert = `/"${note.name}" `;
+								view.dispatch({
+									changes: { from: slashPos, to: end, insert },
+									selection: { anchor: slashPos + insert.length },
+								});
+							},
+						};
+					});
+
 					return {
-						from: noteWord.from,
-						options: noteSuggestions.map((note, index) => {
-							const hasSpacesOrSpecial =
-								note.name.includes(' ') || /[^\w\-/.]/.test(note.name);
-							const applyText = hasSpacesOrSpecial ? `/"${note.name}" ` : `/${note.name} `;
-							const detailText = note.isRecent ? '🕒 Recent • Note' : 'Note';
-							const boost = note.isRecent ? 100 - index : 0;
-							return {
-								label: `/${note.name}`,
-								detail: detailText,
-								apply: applyText,
-								type: 'variable',
-								boost,
-							};
-						}),
+						from: fromPos,
+						options,
 					};
 				}
 
-				// Header autocomplete on '@'
-				const headerWord = context.matchBefore(/@[^\n/]*$/);
+				// 3. Header autocomplete on '@'
+				const headerWord = context.matchBefore(/@(?:"[^"]*|[^\n/]*)$/);
 				if (headerWord) {
 					const docText = context.state.doc.toString();
 					const noteName = extractNoteNameFromDoc(docText);
 					const headers = getHeaders(noteName);
-					const typed = headerWord.text.slice(1).trim().replace(/^["']|["']$/g, '');
+					const isQuoted = headerWord.text.startsWith('@"');
+					const fromPos = isQuoted ? headerWord.from + 2 : headerWord.from + 1;
+					const typed = isQuoted
+						? headerWord.text.slice(2).trim()
+						: headerWord.text.slice(1).trim();
 
 					const options: Completion[] = headers.map((h, index) => {
 						const detailText = h.isRecent
 							? `🕒 Recent • H${h.level}`
 							: `H${h.level}`;
-						const needsQuotes = h.heading.includes(' ') || /[^\w\-/]/.test(h.heading);
-						const applyText = needsQuotes ? `@"${h.heading}" ` : `@${h.heading} `;
 						const boost = h.isRecent ? 100 - index : 0;
 						return {
-							label: `@${h.heading}`,
+							label: h.heading,
 							detail: detailText,
-							apply: applyText,
 							type: 'keyword',
 							boost,
+							apply: (view: EditorView, completion: Completion, from: number, to: number) => {
+								const doc = view.state.doc.toString();
+								const atPos = headerWord.from;
+								let end = to;
+								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								const insert = `@"${h.heading}" `;
+								view.dispatch({
+									changes: { from: atPos, to: end, insert },
+									selection: { anchor: atPos + insert.length },
+								});
+							},
 						};
 					});
 
 					if (typed && !headers.some((h) => h.heading.toLowerCase() === typed.toLowerCase())) {
 						const hashes = '#'.repeat(Math.max(1, Math.min(6, newHeaderLevel)));
-						const needsQuotes = typed.includes(' ') || /[^\w\-/]/.test(typed);
-						const applyText = needsQuotes ? `@"${typed}" ` : `@${typed} `;
 						options.push({
-							label: `@${typed}`,
+							label: typed,
 							detail: `✨ Will create ${hashes} ${typed}`,
-							apply: applyText,
 							type: 'text',
 							boost: -1,
+							apply: (view: EditorView, completion: Completion, from: number, to: number) => {
+								const doc = view.state.doc.toString();
+								const atPos = headerWord.from;
+								let end = to;
+								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								const insert = `@"${typed}" `;
+								view.dispatch({
+									changes: { from: atPos, to: end, insert },
+									selection: { anchor: atPos + insert.length },
+								});
+							},
 						});
 					}
 
 					return {
-						from: headerWord.from,
+						from: fromPos,
 						options,
 					};
 				}
@@ -287,7 +434,156 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		],
 	});
 
-	// 3. Single-line transaction filter (strips newlines)
+	// 3. Auto-pair input handler for '/', '@', and '[' plus closing step-overs
+	const autoPairInputHandler = EditorView.inputHandler.of(
+		(view: EditorView, from: number, to: number, text: string): boolean => {
+			const doc = view.state.doc;
+
+			// Auto-pair '/' -> /""
+			if (text === '/') {
+				if (from !== to) {
+					const selected = doc.sliceString(from, to);
+					const insert = `/"${selected}"`;
+					view.dispatch({
+						changes: { from, to, insert },
+						selection: { anchor: from + insert.length },
+					});
+					return true;
+				}
+
+				const needsLeadingSpace =
+					from > 0 && !/\s/.test(doc.sliceString(from - 1, from));
+				const insert = needsLeadingSpace ? ' /""' : '/""';
+				const caretOffset = needsLeadingSpace ? 3 : 2;
+
+				view.dispatch({
+					changes: { from, to, insert },
+					selection: { anchor: from + caretOffset },
+				});
+				window.setTimeout(() => {
+					startCompletion(view);
+				}, 20);
+				return true;
+			}
+
+			// Auto-pair '@' -> @""
+			if (text === '@') {
+				if (from !== to) {
+					const selected = doc.sliceString(from, to);
+					const insert = `@"${selected}"`;
+					view.dispatch({
+						changes: { from, to, insert },
+						selection: { anchor: from + insert.length },
+					});
+					return true;
+				}
+
+				const needsLeadingSpace =
+					from > 0 && !/\s/.test(doc.sliceString(from - 1, from));
+				const insert = needsLeadingSpace ? ' @""' : '@""';
+				const caretOffset = needsLeadingSpace ? 3 : 2;
+
+				view.dispatch({
+					changes: { from, to, insert },
+					selection: { anchor: from + caretOffset },
+				});
+				window.setTimeout(() => {
+					startCompletion(view);
+				}, 20);
+				return true;
+			}
+
+			// Auto-pair '[' -> [[]]
+			if (text === '[') {
+				if (from !== to) {
+					const selected = doc.sliceString(from, to);
+					const insert = `[[${selected}]]`;
+					view.dispatch({
+						changes: { from, to, insert },
+						selection: { anchor: from + insert.length },
+					});
+					return true;
+				}
+
+				// If already between [[ and ]], typing '[' keeps caret inside
+				if (
+					from >= 2 &&
+					from + 2 <= doc.length &&
+					doc.sliceString(from - 2, from) === '[[' &&
+					doc.sliceString(from, from + 2) === ']]'
+				) {
+					return true;
+				}
+
+				// If immediately after a single '[', convert to [[]]
+				if (from > 0 && doc.sliceString(from - 1, from) === '[') {
+					const after = doc.sliceString(from, from + 1);
+					if (after === ']') {
+						view.dispatch({
+							changes: [
+								{ from: from, to: from, insert: '[' },
+								{ from: from + 1, to: from + 1, insert: ']' },
+							],
+							selection: { anchor: from + 1 },
+						});
+					} else {
+						view.dispatch({
+							changes: [{ from: from, to: from, insert: '[]]' }],
+							selection: { anchor: from + 1 },
+						});
+					}
+					window.setTimeout(() => {
+						startCompletion(view);
+					}, 20);
+					return true;
+				}
+
+				const needsLeadingSpace =
+					from > 0 && !/\s/.test(doc.sliceString(from - 1, from));
+				const insert = needsLeadingSpace ? ' [[]]' : '[[]]';
+				const caretOffset = needsLeadingSpace ? 3 : 2;
+
+				view.dispatch({
+					changes: { from, to, insert },
+					selection: { anchor: from + caretOffset },
+				});
+				window.setTimeout(() => {
+					startCompletion(view);
+				}, 20);
+				return true;
+			}
+
+			// Step-over closing quote '"'
+			if (text === '"' && from === to) {
+				if (from < doc.length && doc.sliceString(from, from + 1) === '"') {
+					view.dispatch({
+						selection: { anchor: from + 1 },
+					});
+					return true;
+				}
+			}
+
+			// Step-over closing ']' or ']]'
+			if (text === ']' && from === to) {
+				if (from + 2 <= doc.length && doc.sliceString(from, from + 2) === ']]') {
+					view.dispatch({
+						selection: { anchor: from + 2 },
+					});
+					return true;
+				}
+				if (from < doc.length && doc.sliceString(from, from + 1) === ']') {
+					view.dispatch({
+						selection: { anchor: from + 1 },
+					});
+					return true;
+				}
+			}
+
+			return false;
+		}
+	);
+
+	// 4. Single-line transaction filter (strips newlines)
 	const singleLineFilter = EditorState.transactionFilter.of((tr) => {
 		if (tr.docChanged) {
 			const text = tr.newDoc.toString();
@@ -298,21 +594,119 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 		return tr;
 	});
 
-	// 4. Custom keymap for Enter (submit) and Escape (cancel)
+	// 5. Custom keymap for Enter, Escape, and atomic Backspace
 	const modalKeymap = Prec.highest(
 		keymap.of([
 			{
 				key: 'Enter',
-				run: () => {
+				run: (view) => {
+					if (acceptCompletion(view)) {
+						return true;
+					}
 					onSubmit();
 					return true;
 				},
 			},
 			{
 				key: 'Escape',
-				run: () => {
+				run: (view) => {
+					if (closeCompletion(view)) {
+						return true;
+					}
 					onCancel();
 					return true;
+				},
+			},
+			{
+				key: 'Backspace',
+				run: (view: EditorView) => {
+					const { from, to } = view.state.selection.main;
+					if (from !== to) return false;
+
+					const doc = view.state.doc;
+					const docLen = doc.length;
+
+					// Check for /"" (caret inside empty quotes: /|"|)
+					if (from >= 2 && from + 1 <= docLen) {
+						const before = doc.sliceString(from - 2, from);
+						const after = doc.sliceString(from, from + 1);
+						if (before === '/"' && after === '"') {
+							let deleteFrom = from - 2;
+							if (
+								deleteFrom > 0 &&
+								doc.sliceString(deleteFrom - 1, deleteFrom) === ' '
+							) {
+								deleteFrom -= 1;
+							}
+							view.dispatch({
+								changes: { from: deleteFrom, to: from + 1, insert: '' },
+								selection: { anchor: deleteFrom },
+							});
+							return true;
+						}
+					}
+
+					// Check for @"" (caret inside empty quotes: @"|"|)
+					if (from >= 2 && from + 1 <= docLen) {
+						const before = doc.sliceString(from - 2, from);
+						const after = doc.sliceString(from, from + 1);
+						if (before === '@"' && after === '"') {
+							let deleteFrom = from - 2;
+							if (
+								deleteFrom > 0 &&
+								doc.sliceString(deleteFrom - 1, deleteFrom) === ' '
+							) {
+								deleteFrom -= 1;
+							}
+							view.dispatch({
+								changes: { from: deleteFrom, to: from + 1, insert: '' },
+								selection: { anchor: deleteFrom },
+							});
+							return true;
+						}
+					}
+
+					// Check for [[]] (caret inside empty wikilink: [[|]])
+					if (from >= 2 && from + 2 <= docLen) {
+						const before = doc.sliceString(from - 2, from);
+						const after = doc.sliceString(from, from + 2);
+						if (before === '[[' && after === ']]') {
+							let deleteFrom = from - 2;
+							if (
+								deleteFrom > 0 &&
+								doc.sliceString(deleteFrom - 1, deleteFrom) === ' '
+							) {
+								deleteFrom -= 1;
+							}
+							view.dispatch({
+								changes: { from: deleteFrom, to: from + 2, insert: '' },
+								selection: { anchor: deleteFrom },
+							});
+							return true;
+						}
+					}
+
+					// Check for [] (caret inside empty brackets: [|])
+					if (from >= 1 && from + 1 <= docLen) {
+						const before = doc.sliceString(from - 1, from);
+						const after = doc.sliceString(from, from + 1);
+						if (before === '[' && after === ']') {
+							let deleteFrom = from - 1;
+							if (
+								deleteFrom > 0 &&
+								doc.sliceString(deleteFrom - 1, deleteFrom) === ' '
+							) {
+								deleteFrom -= 1;
+							}
+							view.dispatch({
+								changes: { from: deleteFrom, to: from + 1, insert: '' },
+								selection: { anchor: deleteFrom },
+							});
+							return true;
+						}
+					}
+
+					return false;
 				},
 			},
 		])
@@ -321,6 +715,7 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 	return [
 		highlightPlugin,
 		autocompleteExtension,
+		autoPairInputHandler,
 		singleLineFilter,
 		modalKeymap,
 		EditorView.theme({
@@ -342,8 +737,8 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 }
 
 /**
- * Inserts a sign or word (e.g. '/', '@', '#', 'tod') at cursor in a CodeMirror 6 EditorView.
- * Adds leading space if previous character is not whitespace, and optionally opens autocomplete.
+ * Inserts a sign or word (e.g. '/', '@', '#', '[[', 'tod') at cursor in a CodeMirror 6 EditorView.
+ * Automatically handles quote/bracket auto-pairing, adds leading space if needed, and triggers completion.
  */
 export function insertSymbolAtCursor(
 	view: EditorView,
@@ -355,16 +750,47 @@ export function insertSymbolAtCursor(
 	const pos = sel.head;
 
 	let textToInsert = symbol;
-	if (pos > 0) {
+	let cursorOffset = symbol.length;
+
+	const selectedText = sel.from !== sel.to ? doc.sliceString(sel.from, sel.to) : '';
+
+	if (symbol === '/') {
+		if (selectedText) {
+			textToInsert = `/"${selectedText}"`;
+			cursorOffset = textToInsert.length;
+		} else {
+			textToInsert = '/""';
+			cursorOffset = 2; // place cursor inside quotes: /|"|
+		}
+	} else if (symbol === '@') {
+		if (selectedText) {
+			textToInsert = `@"${selectedText}"`;
+			cursorOffset = textToInsert.length;
+		} else {
+			textToInsert = '@""';
+			cursorOffset = 2; // place cursor inside quotes: @"|"|
+		}
+	} else if (symbol === '[[') {
+		if (selectedText) {
+			textToInsert = `[[${selectedText}]]`;
+			cursorOffset = textToInsert.length;
+		} else {
+			textToInsert = '[[]]';
+			cursorOffset = 2; // place cursor inside brackets: [[|]]
+		}
+	}
+
+	if (sel.from === sel.to && pos > 0) {
 		const prevChar = doc.sliceString(pos - 1, pos);
 		if (prevChar !== ' ' && prevChar !== '\t' && prevChar !== '\n') {
-			textToInsert = ' ' + symbol;
+			textToInsert = ' ' + textToInsert;
+			cursorOffset += 1;
 		}
 	}
 
 	view.dispatch({
 		changes: { from: sel.from, to: sel.to, insert: textToInsert },
-		selection: { anchor: sel.from + textToInsert.length },
+		selection: { anchor: sel.from + cursorOffset },
 	});
 	view.focus();
 

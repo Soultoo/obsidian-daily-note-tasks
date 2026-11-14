@@ -1,7 +1,11 @@
 import { App, Editor, Modal, Notice, moment } from 'obsidian';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { createCaptureEditorExtensions, insertSymbolAtCursor } from './editor-extensions';
+import {
+	createCaptureEditorExtensions,
+	getVaultNoteSuggestions,
+	insertSymbolAtCursor,
+} from './editor-extensions';
 import { parseTaskInput } from './parser';
 import { DailyNoteManager } from './daily-note-manager';
 import { TemplateParser } from './template-parser';
@@ -131,6 +135,10 @@ export class MoveTaskModal extends Modal {
 			if (this.editorView) insertSymbolAtCursor(this.editorView, '#', false);
 		});
 
+		addSignBtn('[[', 'Link', 'dnt-symbol-link', 'Note link ([[]])', () => {
+			if (this.editorView) insertSymbolAtCursor(this.editorView, '[[', true);
+		});
+
 		// CodeMirror 6 Editor Container
 		const editorContainerEl = contentEl.createDiv({
 			cls: 'dnt-editor-container',
@@ -155,6 +163,7 @@ export class MoveTaskModal extends Modal {
 		// Initialize CodeMirror 6 Single-Line Editor with full syntax highlighting
 		const extensions = createCaptureEditorExtensions({
 			getHeaders: () => this.templateParser.getHeaders(this.settings.recentHeaders),
+			getVaultNotes: () => getVaultNoteSuggestions(this.app, this.settings.recentNotes),
 			defaultHeader: defaultTargetHeader,
 			timeFormat: this.settings.timeFormat,
 			timePosition: this.settings.timePosition,
