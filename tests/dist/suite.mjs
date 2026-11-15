@@ -8114,6 +8114,61 @@ var TaskAstParser = class {
   }
 };
 
+// src/editor-extensions.ts
+function getVaultNoteSuggestions(app, recentNotes = [], activeNote) {
+  const files = app.vault.getMarkdownFiles();
+  const fileMap = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    fileMap.set(file.basename.toLowerCase(), file);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const suggestions = [];
+  const activeName = typeof activeNote === "string" ? activeNote : activeNote?.basename || app.workspace?.getActiveFile()?.basename;
+  if (activeName) {
+    const lowerActive = activeName.toLowerCase();
+    const file = fileMap.get(lowerActive);
+    if (file) {
+      seen.add(lowerActive);
+      suggestions.push({
+        name: file.basename,
+        path: file.path,
+        isActive: true,
+        isRecent: false
+      });
+    }
+  }
+  for (const recentName of recentNotes) {
+    const lower = recentName.toLowerCase();
+    const file = fileMap.get(lower);
+    if (file && !seen.has(lower)) {
+      seen.add(lower);
+      suggestions.push({
+        name: file.basename,
+        path: file.path,
+        isActive: false,
+        isRecent: true
+      });
+    }
+  }
+  const otherSuggestions = [];
+  for (const file of files) {
+    const lower = file.basename.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      otherSuggestions.push({
+        name: file.basename,
+        path: file.path,
+        isActive: false,
+        isRecent: false
+      });
+    }
+  }
+  otherSuggestions.sort(
+    (a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" })
+  );
+  return [...suggestions, ...otherSuggestions];
+}
+
 // src/move-modal.ts
 function applyTimeToMovedTask(fullText, timeStr, position = "prefix") {
   const lines = fullText.split("\n");
@@ -8629,30 +8684,15 @@ console.log('--- 1. Target Note ("/note") Tests ---');
     { basename: "Projects", path: "Projects.md" },
     { basename: "Books", path: "Books.md" }
   ];
-  const fileMap = /* @__PURE__ */ new Map();
-  for (const f of files) {
-    fileMap.set(f.basename.toLowerCase(), f);
-  }
-  const recentSuggestions = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const recentName of recents) {
-    const lower = recentName.toLowerCase();
-    const file = fileMap.get(lower);
-    if (file && !seen.has(lower)) {
-      seen.add(lower);
-      recentSuggestions.push({ name: file.basename, path: file.path, isRecent: true });
+  const mockApp2 = {
+    vault: {
+      getMarkdownFiles: () => files
+    },
+    workspace: {
+      getActiveFile: () => null
     }
-  }
-  const otherSuggestions = [];
-  for (const f of files) {
-    const lower = f.basename.toLowerCase();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      otherSuggestions.push({ name: f.basename, path: f.path, isRecent: false });
-    }
-  }
-  otherSuggestions.sort((a, b) => a.name.localeCompare(b.name, void 0, { sensitivity: "base" }));
-  const result = [...recentSuggestions, ...otherSuggestions];
+  };
+  const result = getVaultNoteSuggestions(mockApp2, recents);
   assertEqual(result[0].name, "Groceries", "note sort: 1st is most recent (Groceries)");
   assertEqual(result[0].isRecent, true, "note sort: 1st is marked isRecent");
   assertEqual(result[1].name, "Projects", "note sort: 2nd is 2nd recent (Projects)");
@@ -8662,6 +8702,23 @@ console.log('--- 1. Target Note ("/note") Tests ---');
   assertEqual(result[2].isRecent, false, "note sort: remaining notes isRecent is false");
   assertEqual(result[3].name, "Books", "note sort: remaining notes sorted A-Z (Books)");
   assertEqual(result[4].name, "Work", "note sort: remaining notes sorted A-Z (Work)");
+  const activeMockApp = {
+    vault: {
+      getMarkdownFiles: () => files
+    },
+    workspace: {
+      getActiveFile: () => ({ basename: "Work", path: "Work.md" })
+    }
+  };
+  const activeResult = getVaultNoteSuggestions(activeMockApp, recents);
+  assertEqual(activeResult[0].name, "Work", "note sort active: 1st is current open note tab (Work)");
+  assertEqual(activeResult[0].isActive, true, "note sort active: 1st is marked isActive");
+  assertEqual(activeResult[1].name, "Groceries", "note sort active: 2nd is most recent (Groceries)");
+  assertEqual(activeResult[1].isRecent, true, "note sort active: 2nd is marked isRecent");
+  assertEqual(activeResult[2].name, "Projects", "note sort active: 3rd is 2nd recent (Projects)");
+  assertEqual(activeResult[2].isRecent, true, "note sort active: 3rd is marked isRecent");
+  assertEqual(activeResult[3].name, "Archive", "note sort active: remaining notes sorted A-Z (Archive)");
+  assertEqual(activeResult[4].name, "Books", "note sort active: remaining notes sorted A-Z (Books)");
 }
 console.log("\n--- 2. NLP Parser & Bug Fix Tests ---");
 {
@@ -9257,6 +9314,85 @@ console.log("--- 12. Wikilinks & Auto-Pairing Tests ---");
   assertEqual(bs5.handled, false, "backspace: text inside [[]] not intercepted");
 }
 var simulateBackspace2;
+{
+  let matchHeader = function(text) {
+    const m = text.match(headerRegex);
+    if (!m) return null;
+    const from = text.length - m[0].length;
+    if (from > 0 && !/\s/.test(text[from - 1])) return null;
+    return m[0];
+  }, matchNote = function(text) {
+    const m = text.match(noteRegex);
+    if (!m) return null;
+    const from = text.length - m[0].length;
+    if (from > 0 && !/\s/.test(text[from - 1])) return null;
+    return m[0];
+  };
+  matchHeader2 = matchHeader, matchNote2 = matchNote;
+  const headerRegex = /@(?:"[^"\n]*|[^\s/#"'\n]*)$/;
+  const noteRegex = /\/(?:"[^"\n]*|[^\s@#"'\n]*)$/;
+  assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos" asdas'), null, 'autocomplete: @"Todos" asdas does NOT match header');
+  assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos"'), null, 'autocomplete: closed @"Todos" does NOT match header');
+  assertEqual(matchNote('/"Spotify pomodoro app" @"Todos" asdas'), null, 'autocomplete: /"Spotify..." asdas does NOT match note');
+  assertEqual(matchNote('/"Spotify pomodoro app"'), null, 'autocomplete: closed /"Spotify..." does NOT match note');
+  assertEqual(matchHeader('/"Spotify pomodoro app" @Todos asdas'), null, "autocomplete: @Todos asdas does NOT match header");
+  assertEqual(matchHeader("@Todos "), null, "autocomplete: @Todos with space does NOT match header");
+  assertEqual(matchNote("/groceries asdas"), null, "autocomplete: /groceries asdas does NOT match note");
+  assertEqual(matchNote("/groceries "), null, "autocomplete: /groceries with space does NOT match note");
+  assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos'), '@"Todos', 'autocomplete: unclosed @"Todos matches header');
+  assertEqual(matchNote('/"Spotify pomodoro app'), '/"Spotify pomodoro app', 'autocomplete: unclosed /"Spotify... matches note');
+  assertEqual(matchHeader('/"Spotify pomodoro app" @Tod'), "@Tod", "autocomplete: active @Tod matches header");
+  assertEqual(matchNote("/groc"), "/groc", "autocomplete: active /groc matches note");
+  assertEqual(matchHeader("user@domain.com"), null, "autocomplete: email does not match header");
+  assertEqual(matchNote("and/or"), null, "autocomplete: and/or does not match note");
+}
+var matchHeader2;
+var matchNote2;
+{
+  const r1 = parseTaskInput('/"Spotify pomodoro app" @"Todos" asdas', templateHeaders);
+  assertEqual(r1.targetNote, "Spotify pomodoro app", "parser: extracted quoted target note");
+  assertEqual(r1.header, "Todos", "parser: extracted quoted header");
+  assertEqual(r1.cleanText, "asdas", "parser: cleanText is solely asdas");
+  assertEqual(r1.finalTaskText, "asdas", "parser: finalTaskText is solely asdas");
+  const r2 = parseTaskInput('/"Spotify pomodoro app" @Todos asdas', templateHeaders);
+  assertEqual(r2.targetNote, "Spotify pomodoro app", "parser: extracted quoted target note with unquoted header");
+  assertEqual(r2.header, "Todos", "parser: extracted unquoted header");
+  assertEqual(r2.cleanText, "asdas", "parser: cleanText is solely asdas for unquoted header");
+}
+{
+  const noteHeaders = [
+    { heading: "Overview", level: 1, fullText: "# Overview" },
+    { heading: "Written plan", level: 2, fullText: "## Written plan" },
+    { heading: "Todos", level: 2, fullText: "## Todos" },
+    { heading: "Archive", level: 2, fullText: "## Archive" }
+  ];
+  const recentHeaders = ["Todos"];
+  const recentList = [];
+  const remainingList = [];
+  for (const recentName of recentHeaders) {
+    const found = noteHeaders.find(
+      (h) => h.heading.toLowerCase() === recentName.toLowerCase()
+    );
+    if (found && !recentList.some((r) => r.heading.toLowerCase() === found.heading.toLowerCase())) {
+      recentList.push({ ...found, isRecent: true });
+    }
+  }
+  for (const h of noteHeaders) {
+    if (!recentList.some((r) => r.heading.toLowerCase() === h.heading.toLowerCase())) {
+      remainingList.push(h);
+    }
+  }
+  const sortedHeaders = [...recentList, ...remainingList];
+  assertEqual(sortedHeaders[0].heading, "Todos", "header order: 1st is recent header (Todos)");
+  assertEqual(sortedHeaders[0].isRecent, true, "header order: 1st is marked isRecent");
+  assertEqual(sortedHeaders[1].heading, "Overview", "header order: 2nd is topmost header in note (Overview)");
+  assertEqual(sortedHeaders[2].heading, "Written plan", "header order: 3rd is next topmost header (Written plan)");
+  assertEqual(sortedHeaders[3].heading, "Archive", "header order: 4th is bottom header (Archive)");
+  const boosts = sortedHeaders.map((h, index) => h.isRecent ? 90 - index : Math.max(0, 50 - index));
+  assert(boosts[0] > boosts[1], "header boost: recent header has higher boost than topmost note header");
+  assert(boosts[1] > boosts[2], "header boost: topmost note header has higher boost than 2nd header");
+  assert(boosts[2] > boosts[3], "header boost: 2nd header has higher boost than bottom header");
+}
 console.log(`
 === ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===
 `);

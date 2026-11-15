@@ -11,6 +11,7 @@ import { TaskAstParser } from '../src/task-ast';
 import { applyTimeToMovedTask } from '../src/move-modal';
 import { DailyNoteTasksSettingTab } from '../src/settings';
 import { DEFAULT_SETTINGS } from '../src/types';
+import { getVaultNoteSuggestions } from '../src/editor-extensions';
 
 let passed = 0;
 let failed = 0;
@@ -108,37 +109,18 @@ console.log('--- 1. Target Note ("/note") Tests ---');
 		{ basename: 'Projects', path: 'Projects.md' },
 		{ basename: 'Books', path: 'Books.md' },
 	];
+	const mockApp = {
+		vault: {
+			getMarkdownFiles: () => files as any,
+		},
+		workspace: {
+			getActiveFile: () => null,
+		},
+	} as any;
 
-	const fileMap = new Map<string, any>();
-	for (const f of files) {
-		fileMap.set(f.basename.toLowerCase(), f);
-	}
+	const result = getVaultNoteSuggestions(mockApp, recents);
 
-	const recentSuggestions: any[] = [];
-	const seen = new Set<string>();
-
-	for (const recentName of recents) {
-		const lower = recentName.toLowerCase();
-		const file = fileMap.get(lower);
-		if (file && !seen.has(lower)) {
-			seen.add(lower);
-			recentSuggestions.push({ name: file.basename, path: file.path, isRecent: true });
-		}
-	}
-
-	const otherSuggestions: any[] = [];
-	for (const f of files) {
-		const lower = f.basename.toLowerCase();
-		if (!seen.has(lower)) {
-			seen.add(lower);
-			otherSuggestions.push({ name: f.basename, path: f.path, isRecent: false });
-		}
-	}
-	otherSuggestions.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-
-	const result = [...recentSuggestions, ...otherSuggestions];
-
-	// Verify order:
+	// Verify order without active note:
 	assertEqual(result[0].name, 'Groceries', 'note sort: 1st is most recent (Groceries)');
 	assertEqual(result[0].isRecent, true, 'note sort: 1st is marked isRecent');
 	assertEqual(result[1].name, 'Projects', 'note sort: 2nd is 2nd recent (Projects)');
@@ -148,6 +130,26 @@ console.log('--- 1. Target Note ("/note") Tests ---');
 	assertEqual(result[2].isRecent, false, 'note sort: remaining notes isRecent is false');
 	assertEqual(result[3].name, 'Books', 'note sort: remaining notes sorted A-Z (Books)');
 	assertEqual(result[4].name, 'Work', 'note sort: remaining notes sorted A-Z (Work)');
+
+	// Verify order WITH active note: active note tab MUST be 1st suggestion
+	const activeMockApp = {
+		vault: {
+			getMarkdownFiles: () => files as any,
+		},
+		workspace: {
+			getActiveFile: () => ({ basename: 'Work', path: 'Work.md' }),
+		},
+	} as any;
+
+	const activeResult = getVaultNoteSuggestions(activeMockApp, recents);
+	assertEqual(activeResult[0].name, 'Work', 'note sort active: 1st is current open note tab (Work)');
+	assertEqual(activeResult[0].isActive, true, 'note sort active: 1st is marked isActive');
+	assertEqual(activeResult[1].name, 'Groceries', 'note sort active: 2nd is most recent (Groceries)');
+	assertEqual(activeResult[1].isRecent, true, 'note sort active: 2nd is marked isRecent');
+	assertEqual(activeResult[2].name, 'Projects', 'note sort active: 3rd is 2nd recent (Projects)');
+	assertEqual(activeResult[2].isRecent, true, 'note sort active: 3rd is marked isRecent');
+	assertEqual(activeResult[3].name, 'Archive', 'note sort active: remaining notes sorted A-Z (Archive)');
+	assertEqual(activeResult[4].name, 'Books', 'note sort active: remaining notes sorted A-Z (Books)');
 }
 
 // ----------------------------------------------------
@@ -866,6 +868,108 @@ console.log('--- 12. Wikilinks & Auto-Pairing Tests ---');
 	// 5. Backspace with text inside [[]] is NOT intercepted (allows normal letter deletion)
 	const bs5 = simulateBackspace('[[Apollo]]', 8);
 	assertEqual(bs5.handled, false, 'backspace: text inside [[]] not intercepted');
+}
+
+// Test 12.6: Autocomplete delimiter boundaries (prevents false matches across quotes and spaces)
+{
+	const headerRegex = /@(?:"[^"\n]*|[^\s/#"'\n]*)$/;
+	const noteRegex = /\/(?:"[^"\n]*|[^\s@#"'\n]*)$/;
+
+	function matchHeader(text: string) {
+		const m = text.match(headerRegex);
+		if (!m) return null;
+		const from = text.length - m[0].length;
+		if (from > 0 && !/\s/.test(text[from - 1])) return null;
+		return m[0];
+	}
+
+	function matchNote(text: string) {
+		const m = text.match(noteRegex);
+		if (!m) return null;
+		const from = text.length - m[0].length;
+		if (from > 0 && !/\s/.test(text[from - 1])) return null;
+		return m[0];
+	}
+
+	// Quoted closed delimiters must NEVER match across the closing quote
+	assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos" asdas'), null, 'autocomplete: @"Todos" asdas does NOT match header');
+	assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos"'), null, 'autocomplete: closed @"Todos" does NOT match header');
+	assertEqual(matchNote('/"Spotify pomodoro app" @"Todos" asdas'), null, 'autocomplete: /"Spotify..." asdas does NOT match note');
+	assertEqual(matchNote('/"Spotify pomodoro app"'), null, 'autocomplete: closed /"Spotify..." does NOT match note');
+
+	// Unquoted delimiters followed by space must NEVER match across space
+	assertEqual(matchHeader('/"Spotify pomodoro app" @Todos asdas'), null, 'autocomplete: @Todos asdas does NOT match header');
+	assertEqual(matchHeader('@Todos '), null, 'autocomplete: @Todos with space does NOT match header');
+	assertEqual(matchNote('/groceries asdas'), null, 'autocomplete: /groceries asdas does NOT match note');
+	assertEqual(matchNote('/groceries '), null, 'autocomplete: /groceries with space does NOT match note');
+
+	// Legitimate unclosed quoted delimiters MUST match
+	assertEqual(matchHeader('/"Spotify pomodoro app" @"Todos'), '@"Todos', 'autocomplete: unclosed @"Todos matches header');
+	assertEqual(matchNote('/"Spotify pomodoro app'), '/"Spotify pomodoro app', 'autocomplete: unclosed /"Spotify... matches note');
+
+	// Legitimate unquoted delimiters being actively typed MUST match
+	assertEqual(matchHeader('/"Spotify pomodoro app" @Tod'), '@Tod', 'autocomplete: active @Tod matches header');
+	assertEqual(matchNote('/groc'), '/groc', 'autocomplete: active /groc matches note');
+
+	// Preceded by non-whitespace must NOT match
+	assertEqual(matchHeader('user@domain.com'), null, 'autocomplete: email does not match header');
+	assertEqual(matchNote('and/or'), null, 'autocomplete: and/or does not match note');
+}
+
+// Test 12.7: Parsing user task with quoted note and header followed by task text
+{
+	const r1 = parseTaskInput('/"Spotify pomodoro app" @"Todos" asdas', templateHeaders);
+	assertEqual(r1.targetNote, 'Spotify pomodoro app', 'parser: extracted quoted target note');
+	assertEqual(r1.header, 'Todos', 'parser: extracted quoted header');
+	assertEqual(r1.cleanText, 'asdas', 'parser: cleanText is solely asdas');
+	assertEqual(r1.finalTaskText, 'asdas', 'parser: finalTaskText is solely asdas');
+
+	const r2 = parseTaskInput('/"Spotify pomodoro app" @Todos asdas', templateHeaders);
+	assertEqual(r2.targetNote, 'Spotify pomodoro app', 'parser: extracted quoted target note with unquoted header');
+	assertEqual(r2.header, 'Todos', 'parser: extracted unquoted header');
+	assertEqual(r2.cleanText, 'asdas', 'parser: cleanText is solely asdas for unquoted header');
+}
+
+// Test 12.8: Header prioritization (Recent first, then topmost in note in document order)
+{
+	const noteHeaders = [
+		{ heading: 'Overview', level: 1, fullText: '# Overview' },
+		{ heading: 'Written plan', level: 2, fullText: '## Written plan' },
+		{ heading: 'Todos', level: 2, fullText: '## Todos' },
+		{ heading: 'Archive', level: 2, fullText: '## Archive' },
+	];
+	const recentHeaders = ['Todos'];
+
+	const recentList: any[] = [];
+	const remainingList: any[] = [];
+
+	for (const recentName of recentHeaders) {
+		const found = noteHeaders.find(
+			(h) => h.heading.toLowerCase() === recentName.toLowerCase()
+		);
+		if (found && !recentList.some((r) => r.heading.toLowerCase() === found.heading.toLowerCase())) {
+			recentList.push({ ...found, isRecent: true });
+		}
+	}
+
+	for (const h of noteHeaders) {
+		if (!recentList.some((r) => r.heading.toLowerCase() === h.heading.toLowerCase())) {
+			remainingList.push(h);
+		}
+	}
+
+	const sortedHeaders = [...recentList, ...remainingList];
+	assertEqual(sortedHeaders[0].heading, 'Todos', 'header order: 1st is recent header (Todos)');
+	assertEqual(sortedHeaders[0].isRecent, true, 'header order: 1st is marked isRecent');
+	assertEqual(sortedHeaders[1].heading, 'Overview', 'header order: 2nd is topmost header in note (Overview)');
+	assertEqual(sortedHeaders[2].heading, 'Written plan', 'header order: 3rd is next topmost header (Written plan)');
+	assertEqual(sortedHeaders[3].heading, 'Archive', 'header order: 4th is bottom header (Archive)');
+
+	// Verify CodeMirror boost ordering
+	const boosts = sortedHeaders.map((h, index) => h.isRecent ? 90 - index : Math.max(0, 50 - index));
+	assert(boosts[0] > boosts[1], 'header boost: recent header has higher boost than topmost note header');
+	assert(boosts[1] > boosts[2], 'header boost: topmost note header has higher boost than 2nd header');
+	assert(boosts[2] > boosts[3], 'header boost: 2nd header has higher boost than bottom header');
 }
 
 console.log(`\n=== ALL STRESS TESTS COMPLETED: ${passed} PASSED, ${failed} FAILED ===\n`);

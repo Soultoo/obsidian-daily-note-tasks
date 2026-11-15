@@ -163,7 +163,12 @@ export class MoveTaskModal extends Modal {
 		// Initialize CodeMirror 6 Single-Line Editor with full syntax highlighting
 		const extensions = createCaptureEditorExtensions({
 			getHeaders: () => this.templateParser.getHeaders(this.settings.recentHeaders),
-			getVaultNotes: () => getVaultNoteSuggestions(this.app, this.settings.recentNotes),
+			getVaultNotes: () =>
+				getVaultNoteSuggestions(
+					this.app,
+					this.settings.recentNotes,
+					this.app.workspace.getActiveFile()
+				),
 			defaultHeader: defaultTargetHeader,
 			timeFormat: this.settings.timeFormat,
 			timePosition: this.settings.timePosition,

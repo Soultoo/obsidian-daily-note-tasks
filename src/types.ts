@@ -47,6 +47,7 @@ export interface VaultNoteSuggestion {
 	name: string;
 	path: string;
 	isRecent?: boolean;
+	isActive?: boolean;
 }
 
 export interface RecurringBlueprint {

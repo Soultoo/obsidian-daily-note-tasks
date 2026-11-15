@@ -45,11 +45,12 @@ function extractNoteNameFromDoc(docText: string): string | null {
 }
 
 /**
- * Returns a sorted list of vault notes with recent notes boosted to the top.
+ * Returns a sorted list of vault notes with current active tab first, then recent notes boosted.
  */
 export function getVaultNoteSuggestions(
 	app: App,
-	recentNotes: string[] = []
+	recentNotes: string[] = [],
+	activeNote?: TFile | string | null
 ): VaultNoteSuggestion[] {
 	const files = app.vault.getMarkdownFiles();
 	const fileMap = new Map<string, TFile>();
@@ -57,22 +58,45 @@ export function getVaultNoteSuggestions(
 		fileMap.set(file.basename.toLowerCase(), file);
 	}
 
-	const recentSuggestions: VaultNoteSuggestion[] = [];
 	const seen = new Set<string>();
+	const suggestions: VaultNoteSuggestion[] = [];
 
+	// 1. Current open note tab (if available) - top priority
+	const activeName =
+		typeof activeNote === 'string'
+			? activeNote
+			: activeNote?.basename || app.workspace?.getActiveFile()?.basename;
+
+	if (activeName) {
+		const lowerActive = activeName.toLowerCase();
+		const file = fileMap.get(lowerActive);
+		if (file) {
+			seen.add(lowerActive);
+			suggestions.push({
+				name: file.basename,
+				path: file.path,
+				isActive: true,
+				isRecent: false,
+			});
+		}
+	}
+
+	// 2. Recent notes - 2nd priority
 	for (const recentName of recentNotes) {
 		const lower = recentName.toLowerCase();
 		const file = fileMap.get(lower);
 		if (file && !seen.has(lower)) {
 			seen.add(lower);
-			recentSuggestions.push({
+			suggestions.push({
 				name: file.basename,
 				path: file.path,
+				isActive: false,
 				isRecent: true,
 			});
 		}
 	}
 
+	// 3. Other vault notes sorted alphabetically
 	const otherSuggestions: VaultNoteSuggestion[] = [];
 	for (const file of files) {
 		const lower = file.basename.toLowerCase();
@@ -81,6 +105,7 @@ export function getVaultNoteSuggestions(
 			otherSuggestions.push({
 				name: file.basename,
 				path: file.path,
+				isActive: false,
 				isRecent: false,
 			});
 		}
@@ -89,7 +114,7 @@ export function getVaultNoteSuggestions(
 		a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 	);
 
-	return [...recentSuggestions, ...otherSuggestions];
+	return [...suggestions, ...otherSuggestions];
 }
 
 export function createCaptureEditorExtensions(options: EditorExtensionOptions): Extension[] {
@@ -290,8 +315,16 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 					const fromPos = linkWord.from + 2;
 
 					const options: Completion[] = noteSuggestions.map((note, index) => {
-						const detailText = note.isRecent ? '🕒 Recent • Link' : 'Link';
-						const boost = note.isRecent ? 100 - index : 0;
+						const detailText = note.isActive
+							? '📌 Current note'
+							: note.isRecent
+							? '🕒 Recent • Link'
+							: 'Link';
+						const boost = note.isActive
+							? 100
+							: note.isRecent
+							? 90 - index
+							: Math.max(0, 50 - index);
 						return {
 							label: note.name,
 							detail: detailText,
@@ -304,6 +337,9 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 								if (doc.slice(end, end + 2) === ']]') {
 									end += 2;
 								} else if (doc.slice(end, end + 1) === ']') {
+									end += 1;
+								}
+								if (doc.slice(end, end + 1) === ' ') {
 									end += 1;
 								}
 								const insert = `[[${note.name}]] `;
@@ -322,8 +358,16 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 				}
 
 				// 2. Target note autocomplete on '/'
-				const noteWord = context.matchBefore(/\/(?:"[^"]*|[^\n@#]*)$/);
+				const noteWord = context.matchBefore(/\/(?:"[^"\n]*|[^\s@#"'\n]*)$/);
 				if (noteWord) {
+					// Ensure '/' is at start of document or preceded by whitespace
+					if (noteWord.from > 0) {
+						const prevChar = context.state.doc.sliceString(noteWord.from - 1, noteWord.from);
+						if (!/\s/.test(prevChar)) {
+							return null;
+						}
+					}
+
 					const rawNotes = getVaultNotes();
 					const noteSuggestions: VaultNoteSuggestion[] = rawNotes.map((n) =>
 						typeof n === 'string' ? { name: n, path: n, isRecent: false } : n
@@ -333,8 +377,16 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 					const fromPos = isQuoted ? noteWord.from + 2 : noteWord.from + 1;
 
 					const options: Completion[] = noteSuggestions.map((note, index) => {
-						const detailText = note.isRecent ? '🕒 Recent • Note' : 'Note';
-						const boost = note.isRecent ? 100 - index : 0;
+						const detailText = note.isActive
+							? '📌 Current note'
+							: note.isRecent
+							? '🕒 Recent • Note'
+							: 'Note';
+						const boost = note.isActive
+							? 100
+							: note.isRecent
+							? 90 - index
+							: Math.max(0, 50 - index);
 						return {
 							label: note.name,
 							detail: detailText,
@@ -345,6 +397,9 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 								const slashPos = noteWord.from;
 								let end = to;
 								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								if (doc.slice(end, end + 1) === ' ') {
 									end += 1;
 								}
 								const insert = `/"${note.name}" `;
@@ -363,8 +418,16 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 				}
 
 				// 3. Header autocomplete on '@'
-				const headerWord = context.matchBefore(/@(?:"[^"]*|[^\n/]*)$/);
+				const headerWord = context.matchBefore(/@(?:"[^"\n]*|[^\s/#"'\n]*)$/);
 				if (headerWord) {
+					// Ensure '@' is at start of document or preceded by whitespace
+					if (headerWord.from > 0) {
+						const prevChar = context.state.doc.sliceString(headerWord.from - 1, headerWord.from);
+						if (!/\s/.test(prevChar)) {
+							return null;
+						}
+					}
+
 					const docText = context.state.doc.toString();
 					const noteName = extractNoteNameFromDoc(docText);
 					const headers = getHeaders(noteName);
@@ -378,7 +441,9 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 						const detailText = h.isRecent
 							? `🕒 Recent • H${h.level}`
 							: `H${h.level}`;
-						const boost = h.isRecent ? 100 - index : 0;
+						// 1st priority: Recent headers (in recency order: 90 down to 81)
+						// 2nd priority: Topmost headers in the note (in top-to-bottom document order: 50 down to 0)
+						const boost = h.isRecent ? 90 - index : Math.max(0, 50 - index);
 						return {
 							label: h.heading,
 							detail: detailText,
@@ -389,6 +454,9 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 								const atPos = headerWord.from;
 								let end = to;
 								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								if (doc.slice(end, end + 1) === ' ') {
 									end += 1;
 								}
 								const insert = `@"${h.heading}" `;
@@ -406,12 +474,15 @@ export function createCaptureEditorExtensions(options: EditorExtensionOptions): 
 							label: typed,
 							detail: `✨ Will create ${hashes} ${typed}`,
 							type: 'text',
-							boost: -1,
+							boost: -100,
 							apply: (view: EditorView, completion: Completion, from: number, to: number) => {
 								const doc = view.state.doc.toString();
 								const atPos = headerWord.from;
 								let end = to;
 								if (doc.slice(end, end + 1) === '"') {
+									end += 1;
+								}
+								if (doc.slice(end, end + 1) === ' ') {
 									end += 1;
 								}
 								const insert = `@"${typed}" `;

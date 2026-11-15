@@ -28,20 +28,21 @@ Quickly capture tasks anywhere in your vault using a streamlined CodeMirror 6 ca
 ---
 
 ### 2. Context-Aware Section Autocomplete (`@`)
-- **Daily Note Template Integration**: When adding tasks to your daily note, typing `@` autocompletes sections directly from your daily note template.
-- **Note-Specific Autocomplete**: When a target note is specified with `/` (e.g. `/Groceries @`), `@` inspects and suggests only headers already present in that specific note.
-- **Recently Used Sections**: Recent sections are boosted to the top of the autocomplete list and marked with `🕒 Recent • H#`.
-- **New Section Detection**: If you type a section header that does not exist yet:
+- **Daily Note & Target Note Integration**: When adding tasks to your daily note or a target note (`/note`), typing `@` autocompletes sections with smart ranking:
+  1. **Recently Used Sections (`🕒 Recent • H#`)**: Prioritized first in order of recency.
+  2. **Topmost Sections in Note**: Listed next in their natural top-to-bottom document order.
+  3. **New Section Creation (`✨ Will create ## <header>`)**: Automatically creates the section at your configured heading level (H1–H6, default `##`).
+- **New Section Detection**:
   - Highlighted with a distinct amber underline and preview tooltip (`✨ Will create ## <header>`).
-  - Automatically creates the section at your configured heading level (H1–H6, default `##`).
   - Optional setting to automatically insert an inline `+ add task` button under newly created sections.
 
 ---
 
 ### 3. Vault Note Autocomplete & Recent Tracking (`/`)
-- Type `/` to target any markdown file in your vault.
-- **Recently Used Notes First**: Recent notes are saved and boosted to the top with a `🕒 Recent • Note` badge.
-- **Alphabetical Vault Search**: Remaining notes in your vault are sorted alphabetically (A–Z) for rapid discovery.
+- Type `/` to target any markdown file in your vault:
+  - **Active Tab Priority (`📌 Current note`)**: When typing `/` without text, the currently open note tab is automatically suggested at the very top.
+  - **Recently Used Notes (`🕒 Recent • Note`)**: Recently targeted notes are boosted right after the active tab in recency order.
+  - **Alphabetical Vault Search**: Remaining notes in your vault are sorted alphabetically (A–Z) for rapid discovery.
 - **Smart Quoting**: Note titles with spaces or special characters are automatically wrapped in quotes (e.g. `/"Obsidian plugin development"`).
 
 ---

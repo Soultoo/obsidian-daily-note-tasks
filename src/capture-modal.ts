@@ -33,6 +33,7 @@ export class TaskCaptureModal extends Modal {
 	private textBadgeEl!: HTMLElement;
 	private submitBtn!: HTMLButtonElement;
 	private currentParsed: ParsedTask | null = null;
+	private activeFile: TFile | null = null;
 
 	constructor(
 		app: App,
@@ -54,6 +55,7 @@ export class TaskCaptureModal extends Modal {
 		this.initialDoc = initialDoc;
 		this.defaultDateMoment = defaultDateMoment;
 		this.onReopen = onReopen;
+		this.activeFile = app.workspace.getActiveFile();
 	}
 
 	onOpen(): void {
@@ -227,17 +229,115 @@ export class TaskCaptureModal extends Modal {
 	}
 
 	private getHeadersForNote(targetNote?: string | null): TemplateHeader[] {
+		const recentHeaders = this.settings.recentHeaders || [];
+
 		if (!targetNote) {
-			return this.templateParser.getHeaders(this.settings.recentHeaders);
+			// Daily note target: combine today's daily note headings with template headings
+			let dailyFile: TFile | null = null;
+			try {
+				const allDailyNotes = getAllDailyNotes();
+				const targetDate = this.defaultDateMoment || moment();
+				dailyFile = getDailyNote(targetDate, allDailyNotes);
+			} catch {
+				dailyFile = null;
+			}
+
+			const dailyHeaders: TemplateHeader[] = [];
+			if (dailyFile) {
+				const cache = this.app.metadataCache.getFileCache(dailyFile);
+				if (cache && cache.headings) {
+					for (const h of cache.headings) {
+						dailyHeaders.push({
+							heading: h.heading.replace(/[*_`#[\]@]/g, '').trim(),
+							level: h.level,
+							fullText: `${'#'.repeat(h.level)} ${h.heading}`,
+						});
+					}
+				}
+			}
+
+			const templateHeaders = this.templateParser.getHeaders([]);
+			const existingNames = new Set<string>();
+			const combined: TemplateHeader[] = [];
+
+			// 1. Topmost headers in today's daily note first
+			for (const h of dailyHeaders) {
+				const lower = h.heading.toLowerCase();
+				if (!existingNames.has(lower)) {
+					existingNames.add(lower);
+					combined.push(h);
+				}
+			}
+
+			// 2. Template headers next
+			for (const h of templateHeaders) {
+				const lower = h.heading.toLowerCase();
+				if (!existingNames.has(lower)) {
+					existingNames.add(lower);
+					combined.push(h);
+				}
+			}
+
+			// Prioritize recently used headers first, then preserve note / template order
+			const recentList: TemplateHeader[] = [];
+			const remainingList: TemplateHeader[] = [];
+
+			for (const recentName of recentHeaders) {
+				const found = combined.find(
+					(h) => h.heading.toLowerCase() === recentName.toLowerCase()
+				);
+				if (found && !recentList.some((r) => r.heading.toLowerCase() === found.heading.toLowerCase())) {
+					recentList.push({ ...found, isRecent: true });
+				}
+			}
+
+			for (const h of combined) {
+				if (!recentList.some((r) => r.heading.toLowerCase() === h.heading.toLowerCase())) {
+					remainingList.push(h);
+				}
+			}
+
+			return [...recentList, ...remainingList];
 		}
 
 		const cleanName = targetNote.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
 		const files = this.app.vault.getMarkdownFiles();
-		const targetFile = files.find(
-			(f) =>
-				f.basename.toLowerCase() === cleanName ||
-				f.path.toLowerCase() === cleanName
-		);
+		let targetFile: TFile | null = null;
+
+		if (cleanName === 'today' || cleanName === 'tod') {
+			try {
+				const all = getAllDailyNotes();
+				targetFile = getDailyNote(moment(), all);
+			} catch {
+				targetFile = null;
+			}
+		} else if (cleanName === 'tomorrow' || cleanName === 'tom') {
+			try {
+				const all = getAllDailyNotes();
+				targetFile = getDailyNote(moment().add(1, 'day'), all);
+			} catch {
+				targetFile = null;
+			}
+		} else {
+			const m = moment(cleanName, 'YYYY-MM-DD', true);
+			if (m.isValid()) {
+				try {
+					const all = getAllDailyNotes();
+					targetFile = getDailyNote(m, all);
+				} catch {
+					targetFile = null;
+				}
+			}
+		}
+
+		if (!targetFile) {
+			targetFile =
+				files.find(
+					(f) =>
+						f.basename.toLowerCase() === cleanName ||
+						f.path.toLowerCase() === cleanName
+				) || null;
+		}
 
 		if (!targetFile) {
 			return [];
@@ -265,7 +365,26 @@ export class TaskCaptureModal extends Modal {
 			}
 		}
 
-		return combined;
+		// Prioritize recently used headers first, then preserve note top-to-bottom document order
+		const recentList: TemplateHeader[] = [];
+		const remainingList: TemplateHeader[] = [];
+
+		for (const recentName of recentHeaders) {
+			const found = combined.find(
+				(h) => h.heading.toLowerCase() === recentName.toLowerCase()
+			);
+			if (found && !recentList.some((r) => r.heading.toLowerCase() === found.heading.toLowerCase())) {
+				recentList.push({ ...found, isRecent: true });
+			}
+		}
+
+		for (const h of combined) {
+			if (!recentList.some((r) => r.heading.toLowerCase() === h.heading.toLowerCase())) {
+				remainingList.push(h);
+			}
+		}
+
+		return [...recentList, ...remainingList];
 	}
 
 	private isHeaderExisting(
@@ -324,7 +443,8 @@ export class TaskCaptureModal extends Modal {
 	}
 
 	private getVaultNotes(): VaultNoteSuggestion[] {
-		return getVaultNoteSuggestions(this.app, this.settings.recentNotes);
+		const activeFile = this.activeFile || this.app.workspace.getActiveFile();
+		return getVaultNoteSuggestions(this.app, this.settings.recentNotes, activeFile);
 	}
 
 	private updatePreviewBadges(parsed: ParsedTask): void {
@@ -445,10 +565,24 @@ export class TaskCaptureModal extends Modal {
 		}
 
 		try {
+			// Track recent headers for ALL tasks (custom notes, recurring blueprints, and daily notes)
+			const targetHeader =
+				parsed.header ||
+				(parsed.targetNote
+					? this.settings.defaultCustomNoteHeader || 'Todos'
+					: this.settings.defaultHeader);
+
+			if (targetHeader) {
+				const filteredHeaders = (this.settings.recentHeaders || []).filter(
+					(h) => h.toLowerCase() !== targetHeader.toLowerCase()
+				);
+				this.settings.recentHeaders = [targetHeader, ...filteredHeaders].slice(0, 10);
+			}
+
 			// If target note is specified (e.g. /groceries)
 			if (parsed.targetNote) {
 				const targetNoteName = parsed.targetNote;
-				const header = parsed.header || this.settings.defaultCustomNoteHeader || 'Todos';
+				const header = targetHeader;
 
 				// Track recent note
 				const filteredNotes = (this.settings.recentNotes || []).filter(
@@ -484,16 +618,7 @@ export class TaskCaptureModal extends Modal {
 				return;
 			}
 
-			const targetHeader = parsed.header || this.settings.defaultHeader;
-
-			// Track recent headers
-			if (targetHeader) {
-				const filtered = this.settings.recentHeaders.filter(
-					(h) => h.toLowerCase() !== targetHeader.toLowerCase()
-				);
-				this.settings.recentHeaders = [targetHeader, ...filtered].slice(0, 10);
-				await this.onSaveSettings();
-			}
+			await this.onSaveSettings();
 
 			// If recurrence rule is present, register as recurring blueprint
 			if (parsed.recurrence) {
